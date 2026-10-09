@@ -18,15 +18,23 @@ const RAPID_FIRE_CRYSTAL: CrystalData = preload(
 
 var _original_gold: int
 var _created_nodes: Array[Node] = []
+var _original_current_scene: Node
 
 
 func before_test() -> void:
 	_original_gold = GoldManager.run_gold
+	_original_current_scene = get_tree().current_scene
 	GoldManager.end_run()
 
 
 func after_test() -> void:
 	get_tree().paused = false
+	if get_tree().current_scene != _original_current_scene:
+		var transitioned_scene := get_tree().current_scene
+		get_tree().current_scene = null
+		if is_instance_valid(transitioned_scene):
+			transitioned_scene.free()
+
 	for node in _created_nodes:
 		if is_instance_valid(node):
 			node.free()
@@ -155,6 +163,171 @@ func test_crystal_installation_removal_and_slow_aura_effect() -> void:
 	assert_int(removed.level).is_equal(1)
 	assert_bool(tower.has_main_crystal()).is_false()
 	assert_float(enemy.effective_speed).is_equal(enemy.speed)
+
+
+func test_tower_panel_install_remove_and_crystal_configuration_stay_in_sync() -> void:
+	var game = _make_game()
+	var tower := game.get_node("Tower") as Tower
+	var panel := game.get_node("HUD/TowerPanel") as PanelContainer
+	var install_button := panel.get_node(
+		"MarginContainer/VBoxContainer/InstallRapidFireButton"
+	) as Button
+	var remove_button := panel.get_node(
+		"MarginContainer/VBoxContainer/RemoveCrystalButton"
+	) as Button
+	var profile_before: Dictionary = CrystalInventory.get_profile_data()
+	var stats_change_count := [0]
+	tower.stats_changed.connect(
+		func() -> void:
+			stats_change_count[0] += 1
+	)
+	game._select_tower(tower)
+	game._select_tower(tower)
+
+	assert_bool(panel.visible).is_true()
+	install_button.pressed.emit()
+
+	var installed := tower.get_main_crystal()
+	assert_bool(installed != null).is_true()
+	assert_object(installed.definition).is_same(RAPID_FIRE_CRYSTAL)
+	assert_int(installed.level).is_equal(1)
+	assert_int(tower.damage).is_equal(12)
+	assert_float(tower.attack_speed).is_equal(2.0)
+	assert_float(tower.attack_range).is_equal(180.0)
+	assert_bool(install_button.visible).is_false()
+	assert_bool(remove_button.visible).is_true()
+	assert_int(stats_change_count[0]).is_equal(1)
+
+	install_button.pressed.emit()
+	assert_object(tower.get_main_crystal()).is_same(installed)
+	assert_int(stats_change_count[0]).is_equal(1)
+
+	remove_button.pressed.emit()
+	assert_bool(tower.main_socket.is_empty()).is_true()
+	assert_bool(tower.get_main_crystal() == null).is_true()
+	assert_bool(install_button.visible).is_true()
+	assert_bool(remove_button.visible).is_false()
+	assert_int(stats_change_count[0]).is_equal(2)
+
+	remove_button.pressed.emit()
+	assert_bool(tower.remove_main_crystal() == null).is_true()
+	assert_int(stats_change_count[0]).is_equal(2)
+	assert_bool(tower.install_main_crystal(null)).is_false()
+	assert_bool(tower.main_socket.is_empty()).is_true()
+	assert_int(stats_change_count[0]).is_equal(2)
+	assert_bool(CrystalInventory.get_profile_data() == profile_before).is_true()
+
+
+func test_game_lifecycle_resets_run_state_without_changing_profile() -> void:
+	var profile_before: Dictionary = CrystalInventory.get_profile_data()
+	assert_int(get_tree().change_scene_to_packed(MAIN_MENU_SCENE)).is_equal(OK)
+	await _await_scene_change()
+	var menu: Variant = get_tree().current_scene
+	assert_bool(menu != null).is_true()
+
+	var start_button := menu.get_node(
+		"CenterPanel/MarginContainer/MenuContents/StartButton"
+	) as Button
+	start_button.pressed.emit()
+	await _await_scene_change()
+	var first_game: Variant = get_tree().current_scene
+	assert_str(first_game.scene_file_path).is_equal("res://game/Game.tscn")
+	var first_wave_manager := first_game.get_node("WaveManager") as WaveManager
+	assert_int(GoldManager.run_gold).is_equal(GoldManager.STARTING_RUN_GOLD)
+	assert_int(first_wave_manager.next_wave_number).is_equal(1)
+	assert_int(first_wave_manager.active_waves.size()).is_equal(0)
+	assert_bool(first_wave_manager.auto_waves_enabled).is_true()
+	assert_bool(first_wave_manager._initial_countdown_started).is_true()
+
+	var first_tower := first_game.get_node("Tower") as Tower
+	first_game._select_tower(first_tower)
+	var first_panel := first_game.get_node("HUD/TowerPanel") as PanelContainer
+	first_panel.get_node(
+		"MarginContainer/VBoxContainer/InstallRapidFireButton"
+	).pressed.emit()
+	assert_bool(first_tower.has_main_crystal()).is_true()
+	assert_bool(first_game.selected_tower == first_tower).is_true()
+
+	GoldManager.add_gold(37)
+	first_game.start_wave_button.pressed.emit()
+	assert_int(first_wave_manager.active_waves.size()).is_equal(1)
+	assert_bool(first_game.get_node("Enemies").get_child_count() > 0).is_true()
+
+	var starting_trophies: int = first_game.castle.get_total_trophy_count()
+	for index in range(starting_trophies):
+		first_game.castle.register_permanent_trophy_loss(
+			StringName("integration_trophy_%d" % index)
+		)
+	await get_tree().process_frame
+	assert_bool(first_game.run_finished).is_true()
+	assert_bool(first_game.game_over_overlay.visible).is_true()
+	assert_bool(first_wave_manager._spawning_stopped).is_true()
+	assert_bool(first_wave_manager._automatic_start_timers.is_empty()).is_true()
+	assert_int(GoldManager.run_gold).is_equal(0)
+
+	var wave_number_at_game_over := first_wave_manager.next_wave_number
+	first_game.start_wave_button.pressed.emit()
+	first_game.continue_run_button.pressed.emit()
+	first_game._on_remaining_trophies_changed(0, starting_trophies)
+	assert_int(first_wave_manager.next_wave_number).is_equal(wave_number_at_game_over)
+	assert_int(first_wave_manager.active_waves.size()).is_equal(1)
+	assert_int(GoldManager.run_gold).is_equal(0)
+	assert_bool(get_tree().paused).is_true()
+
+	var old_game_ref: WeakRef = weakref(first_game)
+	var old_wave_manager_ref: WeakRef = weakref(first_wave_manager)
+	first_game.restart_button.pressed.emit()
+	first_game.restart_button.pressed.emit()
+	await _await_scene_change()
+	assert_bool(old_game_ref.get_ref() == null).is_true()
+	assert_bool(old_wave_manager_ref.get_ref() == null).is_true()
+
+	var retried_game: Variant = get_tree().current_scene
+	assert_str(retried_game.scene_file_path).is_equal("res://game/Game.tscn")
+	var retried_wave_manager := retried_game.get_node("WaveManager") as WaveManager
+	assert_bool(retried_game.run_finished).is_false()
+	assert_bool(retried_game.selected_tower == null).is_true()
+	assert_int(retried_wave_manager.next_wave_number).is_equal(1)
+	assert_int(retried_wave_manager.active_waves.size()).is_equal(0)
+	assert_int(retried_wave_manager.completed_wave_numbers.size()).is_equal(0)
+	assert_bool(retried_wave_manager.auto_waves_enabled).is_true()
+	assert_bool(retried_wave_manager._initial_countdown_started).is_true()
+	assert_int(retried_game.get_node("Enemies").get_child_count()).is_equal(0)
+	assert_bool(
+		(retried_game.get_node("Tower") as Tower).main_socket.is_empty()
+	).is_true()
+	assert_int(GoldManager.run_gold).is_equal(GoldManager.STARTING_RUN_GOLD)
+
+	var build_slots := get_tree().get_nodes_in_group("build_slots")
+	assert_int(build_slots.size()).is_equal(3)
+	for build_slot in build_slots:
+		assert_int(build_slot.tower_built.get_connections().size()).is_equal(1)
+
+	retried_game.end_run_button.pressed.emit()
+	assert_bool(retried_game.end_run_overlay.visible).is_true()
+	assert_bool(get_tree().paused).is_true()
+	retried_game.confirm_end_run_button.pressed.emit()
+	await _await_scene_change()
+	assert_str(get_tree().current_scene.scene_file_path).is_equal(
+		"res://ui/main_menu/MainMenu.tscn"
+	)
+	assert_bool(get_tree().paused).is_false()
+	assert_int(GoldManager.run_gold).is_equal(0)
+
+	var menu_after_run: Variant = get_tree().current_scene
+	var start_again_button := menu_after_run.get_node(
+		"CenterPanel/MarginContainer/MenuContents/StartButton"
+	) as Button
+	start_again_button.pressed.emit()
+	await _await_scene_change()
+	var second_game: Variant = get_tree().current_scene
+	assert_str(second_game.scene_file_path).is_equal("res://game/Game.tscn")
+	assert_bool(second_game.run_finished).is_false()
+	assert_int(second_game.wave_manager.next_wave_number).is_equal(1)
+	assert_int(second_game.wave_manager.active_waves.size()).is_equal(0)
+	assert_int(second_game.get_node("Enemies").get_child_count()).is_equal(0)
+	assert_int(GoldManager.run_gold).is_equal(GoldManager.STARTING_RUN_GOLD)
+	assert_bool(CrystalInventory.get_profile_data() == profile_before).is_true()
 
 
 func test_manual_early_wave_bonus_excludes_killed_enemies() -> void:
@@ -356,3 +529,8 @@ func _find_wave_summary(summaries: Array[Dictionary], wave_number: int) -> Dicti
 		if int(summary["wave_number"]) == wave_number:
 			return summary
 	return {}
+
+
+func _await_scene_change() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
