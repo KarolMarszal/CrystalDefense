@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="EnemyData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://enemies/EnemyData.gd" id="1_enemy_data"]
+[ext_resource type="Texture2D" path="res://enemies/visuals/kobold.svg" id="2_visual"]
+
+[resource]
+script = ExtResource("1_enemy_data")
+enemy_id = &"kobold"
+display_name = "Kobold"
+base_hp = 50
+base_speed = 150.0
+gold_reward = 6
+visual_texture = ExtResource("2_visual")
+visual_scale = 0.24
+difficulty_cost = 1
+unlock_wave = 3
+selection_weight = 1.3
+can_carry_trophy = true
+can_pickup_dropped_trophy = true

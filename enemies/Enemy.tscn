@@ -1,0 +1,16 @@
+[gd_scene format=3 uid="uid://cp5v0u7aswwrs"]
+
+[ext_resource type="Script" uid="uid://b7unlcmu5p18t" path="res://enemies/enemy.gd" id="1_tt7e2"]
+
+[node name="Enemy" type="Node2D" unique_id=1416435975]
+z_index = 10
+script = ExtResource("1_tt7e2")
+
+[node name="Visual" type="Sprite2D" parent="." unique_id=97594050]
+position = Vector2(20, 25)
+
+[node name="HealthBar" type="ProgressBar" parent="." unique_id=1392678604]
+offset_top = -10.0
+offset_right = 40.0
+offset_bottom = -5.0
+show_percentage = false

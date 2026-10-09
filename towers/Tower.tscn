@@ -1,0 +1,18 @@
+[gd_scene format=3 uid="uid://bm4011etsd7xx"]
+
+[ext_resource type="Script" uid="uid://c7ichretyq38n" path="res://towers/tower.gd" id="1_arn3v"]
+[ext_resource type="Texture2D" path="res://towers/visuals/tower.svg" id="2_tower_visual"]
+
+[node name="Tower" type="Area2D" unique_id=432132845]
+script = ExtResource("1_arn3v")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+
+[node name="TowerVisual" type="Sprite2D" parent="."]
+texture = ExtResource("2_tower_visual")
+scale = Vector2(0.42, 0.42)
+
+[node name="CrystalVisual" type="Sprite2D" parent="."]
+visible = false
+position = Vector2(0, -14)
+scale = Vector2(0.2, 0.2)

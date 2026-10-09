@@ -1,0 +1,346 @@
+[gd_scene format=3 uid="uid://btl6gomue3gae"]
+
+[ext_resource type="Script" uid="uid://dy2q4c68vcdai" path="res://game/game.gd" id="1_wbfu4"]
+[ext_resource type="PackedScene" uid="uid://bm4011etsd7xx" path="res://towers/Tower.tscn" id="2_xkndl"]
+[ext_resource type="Script" uid="uid://ccc0corwcs13c" path="res://ui/gold_display.gd" id="3_gold_display"]
+[ext_resource type="PackedScene" path="res://build_slots/BuildSlot.tscn" id="4_sb48q"]
+[ext_resource type="PackedScene" path="res://ui/TowerPanel.tscn" id="5_tower_panel"]
+[ext_resource type="Script" path="res://waves/WaveManager.gd" id="6_wave_manager"]
+[ext_resource type="Resource" path="res://enemies/Goblin.tres" id="7_goblin_data"]
+[ext_resource type="Script" path="res://waves/WaveGenerator.gd" id="17_wave_generator"]
+[ext_resource type="Resource" path="res://enemies/Kobold.tres" id="18_kobold_data"]
+[ext_resource type="Resource" path="res://enemies/Skeleton.tres" id="19_skeleton_data"]
+[ext_resource type="Resource" path="res://enemies/Orc.tres" id="20_orc_data"]
+[ext_resource type="Resource" path="res://enemies/Troll.tres" id="21_troll_data"]
+[ext_resource type="Script" path="res://enemies/EnemyData.gd" id="22_enemy_data"]
+[ext_resource type="Resource" path="res://wave_archetypes/Standard.tres" id="23_standard_archetype"]
+[ext_resource type="Resource" path="res://wave_archetypes/Swarm.tres" id="24_swarm_archetype"]
+[ext_resource type="Resource" path="res://wave_archetypes/Fast.tres" id="25_fast_archetype"]
+[ext_resource type="Resource" path="res://wave_archetypes/Heavy.tres" id="26_heavy_archetype"]
+[ext_resource type="Resource" path="res://wave_archetypes/Mixed.tres" id="27_mixed_archetype"]
+[ext_resource type="Script" path="res://wave_archetypes/WaveArchetype.gd" id="28_wave_archetype"]
+[ext_resource type="Resource" path="res://maps/Forest.tres" id="29_forest_map"]
+[ext_resource type="Script" path="res://waves/WaveEnemyGroup.gd" id="30_wave_enemy_group"]
+[ext_resource type="PackedScene" path="res://game/Castle.tscn" id="31_castle"]
+[ext_resource type="PackedScene" path="res://enemies/EnemyCamp.tscn" id="32_enemy_camp"]
+
+[sub_resource type="Curve2D" id="Curve2D_ognqv"]
+_data = {
+"points": PackedVector2Array(
+	0, 0, 36.67, 0, 150, 315,
+	-31.67, 5.83, 31.67, -5.83, 260, 315,
+	-28.33, 3.33, 28.33, -3.33, 340, 280,
+	-30, -6.67, 30, 6.67, 430, 295,
+	-35, -3.33, 35, 3.33, 520, 320,
+	-38.33, 6.67, 38.33, -6.67, 640, 315,
+	-36.67, 4.17, 36.67, -4.17, 750, 280,
+	-30, -8.33, 30, 8.33, 860, 290,
+	-15, -16.67, 15, 16.67, 930, 330,
+	5, -17.5, -5, 17.5, 950, 390,
+	28.33, -9.17, -28.33, 9.17, 900, 435,
+	41.67, 0.83, -41.67, -0.83, 780, 445,
+	43.33, 1.67, -43.33, -1.67, 650, 430,
+	43.33, -2.5, -43.33, 2.5, 520, 435,
+	41.67, -1.67, -41.67, 1.67, 390, 445,
+	31.67, -5.83, -31.67, 5.83, 270, 445,
+	13.33, -11.67, -13.33, 11.67, 200, 480,
+	-16.67, -7.5, 16.67, 7.5, 190, 515,
+	-43.33, -0.83, 43.33, 0.83, 300, 525,
+	-50, 1.67, 50, -1.67, 450, 520,
+	-50, 0, 50, 0, 600, 515,
+	-50, 0, 50, 0, 750, 520,
+	-43.33, 0.83, 43.33, -0.83, 900, 515,
+	-36.67, 0, 0, 0, 1010, 515
+)
+}
+point_count = 24
+
+[sub_resource type="Resource" id="OpeningSkeletonGroup"]
+script = ExtResource("30_wave_enemy_group")
+enemy_data = ExtResource("19_skeleton_data")
+quantity = 3
+
+[sub_resource type="Resource" id="OpeningTrollGroup"]
+script = ExtResource("30_wave_enemy_group")
+enemy_data = ExtResource("21_troll_data")
+quantity = 2
+
+[node name="Game" type="Node2D" unique_id=961720024]
+script = ExtResource("1_wbfu4")
+
+[node name="ColorRect" type="ColorRect" parent="." unique_id=1642603980]
+offset_right = 1152.0
+offset_bottom = 648.0
+z_index = -100
+mouse_filter = 2
+color = Color(0.15, 0.26, 0.19, 1)
+
+[node name="Enemies" type="Node2D" parent="." unique_id=1512629387]
+
+[node name="EnemyPath" type="Path2D" parent="." unique_id=696788404]
+curve = SubResource("Curve2D_ognqv")
+
+[node name="PathBorder" type="Line2D" parent="EnemyPath"]
+width = 34.0
+default_color = Color(0.18, 0.15, 0.12, 1)
+begin_cap_mode = 2
+end_cap_mode = 2
+joint_mode = 2
+
+[node name="PathSurface" type="Line2D" parent="EnemyPath"]
+width = 25.0
+default_color = Color(0.58, 0.46, 0.31, 1)
+begin_cap_mode = 2
+end_cap_mode = 2
+joint_mode = 2
+
+[node name="EnemyCamp" parent="." instance=ExtResource("32_enemy_camp")]
+position = Vector2(55, 315)
+
+[node name="Castle" parent="." instance=ExtResource("31_castle")]
+position = Vector2(1010, 515)
+
+[node name="WaveManager" type="Node" parent="."]
+script = ExtResource("6_wave_manager")
+default_enemy_data = ExtResource("7_goblin_data")
+active_map_data = ExtResource("29_forest_map")
+
+[node name="WaveGenerator" type="Node" parent="WaveManager"]
+script = ExtResource("17_wave_generator")
+enemy_catalog = Array[ExtResource("22_enemy_data")]([ExtResource("7_goblin_data"), ExtResource("18_kobold_data"), ExtResource("19_skeleton_data"), ExtResource("20_orc_data"), ExtResource("21_troll_data")])
+archetypes = Array[ExtResource("28_wave_archetype")]([ExtResource("23_standard_archetype"), ExtResource("24_swarm_archetype"), ExtResource("25_fast_archetype"), ExtResource("26_heavy_archetype"), ExtResource("27_mixed_archetype")])
+opening_wave_groups = Array[ExtResource("30_wave_enemy_group")]([SubResource("OpeningSkeletonGroup"), SubResource("OpeningTrollGroup")])
+opening_wave_enemy = ExtResource("19_skeleton_data")
+opening_wave_quantity = 5
+base_budget = 10
+budget_growth = 4
+
+[node name="Tower" parent="." unique_id=432132845 instance=ExtResource("2_xkndl")]
+position = Vector2(405, 365)
+
+[node name="HUD" type="CanvasLayer" parent="." unique_id=478919480]
+
+[node name="TowerPanel" parent="HUD" instance=ExtResource("5_tower_panel")]
+
+[node name="GoldLabel" type="Label" parent="HUD" unique_id=23774827]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -180.0
+offset_top = 16.0
+offset_right = -20.0
+offset_bottom = 52.0
+grow_horizontal = 0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 4
+theme_override_font_sizes/font_size = 24
+text = "Gold: 0"
+horizontal_alignment = 2
+script = ExtResource("3_gold_display")
+
+[node name="TrophyLabel" type="Label" parent="HUD"]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -180.0
+offset_top = 54.0
+offset_right = -20.0
+offset_bottom = 84.0
+grow_horizontal = 0
+theme_override_colors/font_color = Color(1, 0.83, 0.28, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 4
+theme_override_font_sizes/font_size = 20
+text = "Trophies:"
+horizontal_alignment = 2
+
+[node name="EndRunButton" type="Button" parent="HUD"]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -180.0
+offset_top = 94.0
+offset_right = -20.0
+offset_bottom = 142.0
+grow_horizontal = 0
+theme_override_font_sizes/font_size = 16
+text = "END RUN"
+
+[node name="BuildButton" type="Button" parent="HUD" unique_id=1414848919]
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = -100.0
+offset_right = 220.0
+offset_bottom = -20.0
+theme_override_font_sizes/font_size = 26
+text = "BUILD"
+
+[node name="CancelButton" type="Button" parent="HUD" unique_id=501210081]
+visible = false
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = -100.0
+offset_right = 220.0
+offset_bottom = -20.0
+theme_override_font_sizes/font_size = 26
+text = "CANCEL"
+
+[node name="WaveLabel" type="Label" parent="HUD"]
+offset_left = 20.0
+offset_top = 16.0
+offset_right = 620.0
+offset_bottom = 44.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 4
+theme_override_font_sizes/font_size = 20
+text = "NEXT WAVE"
+
+[node name="WavePreviewLabel" type="Label" parent="HUD"]
+offset_left = 20.0
+offset_top = 46.0
+offset_right = 440.0
+offset_bottom = 192.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 3
+theme_override_font_sizes/font_size = 14
+text = "Wave: 1"
+
+[node name="StartWaveButton" type="Button" parent="HUD"]
+offset_left = 20.0
+offset_top = 200.0
+offset_right = 240.0
+offset_bottom = 252.0
+theme_override_font_sizes/font_size = 20
+text = "SEND WAVE 1"
+
+[node name="AutoWavesButton" type="Button" parent="HUD"]
+offset_left = 260.0
+offset_top = 200.0
+offset_right = 460.0
+offset_bottom = 252.0
+theme_override_font_sizes/font_size = 18
+text = "Auto Waves: ON"
+
+[node name="WaveCountdownLabel" type="Label" parent="HUD"]
+offset_left = 20.0
+offset_top = 260.0
+offset_right = 360.0
+offset_bottom = 292.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 3
+theme_override_font_sizes/font_size = 20
+
+[node name="BuildSlot" parent="." unique_id=1835341151 instance=ExtResource("4_sb48q")]
+position = Vector2(275, 375)
+price = 5
+
+[node name="BuildSlot2" parent="." unique_id=1771076371 instance=ExtResource("4_sb48q")]
+position = Vector2(555, 375)
+price = 100
+
+[node name="Tower2" parent="." unique_id=761212656 instance=ExtResource("2_xkndl")]
+position = Vector2(720, 365)
+
+[node name="BuildSlot3" parent="." instance=ExtResource("4_sb48q")]
+position = Vector2(865, 375)
+price = 50
+
+[node name="GameOverOverlay" type="ColorRect" parent="HUD"]
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 0
+color = Color(0, 0, 0, 0.78)
+
+[node name="DefeatPanel" type="PanelContainer" parent="HUD/GameOverOverlay"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -230.0
+offset_top = -150.0
+offset_right = 230.0
+offset_bottom = 150.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="DefeatContents" type="VBoxContainer" parent="HUD/GameOverOverlay/DefeatPanel"]
+layout_mode = 2
+theme_override_constants/separation = 18
+
+[node name="DefeatTitle" type="Label" parent="HUD/GameOverOverlay/DefeatPanel/DefeatContents"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 30
+text = "GAME OVER"
+horizontal_alignment = 1
+
+[node name="DefeatMessage" type="Label" parent="HUD/GameOverOverlay/DefeatPanel/DefeatContents"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "All Trophies have been lost."
+horizontal_alignment = 1
+
+[node name="RestartButton" type="Button" parent="HUD/GameOverOverlay/DefeatPanel/DefeatContents"]
+custom_minimum_size = Vector2(200, 56)
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "RESTART RUN"
+
+[node name="MainMenuButton" type="Button" parent="HUD/GameOverOverlay/DefeatPanel/DefeatContents"]
+custom_minimum_size = Vector2(200, 56)
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "MAIN MENU"
+
+[node name="EndRunOverlay" type="ColorRect" parent="HUD"]
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 0
+color = Color(0, 0, 0, 0.78)
+
+[node name="ConfirmationPanel" type="PanelContainer" parent="HUD/EndRunOverlay"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -230.0
+offset_top = -120.0
+offset_right = 230.0
+offset_bottom = 120.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="ConfirmationContents" type="VBoxContainer" parent="HUD/EndRunOverlay/ConfirmationPanel"]
+layout_mode = 2
+theme_override_constants/separation = 18
+
+[node name="ConfirmationTitle" type="Label" parent="HUD/EndRunOverlay/ConfirmationPanel/ConfirmationContents"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "End current run?"
+horizontal_alignment = 1
+
+[node name="ContinueRunButton" type="Button" parent="HUD/EndRunOverlay/ConfirmationPanel/ConfirmationContents"]
+custom_minimum_size = Vector2(220, 56)
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "CONTINUE RUN"
+
+[node name="EndRunButton" type="Button" parent="HUD/EndRunOverlay/ConfirmationPanel/ConfirmationContents"]
+custom_minimum_size = Vector2(220, 56)
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "END RUN"

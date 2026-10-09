@@ -1,0 +1,43 @@
+[gd_resource type="Resource" script_class="BleedCrystal" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://crystals/BleedCrystal.gd" id="1_crystal"]
+[ext_resource type="Script" path="res://crystals/CrystalUpgradeMapping.gd" id="2_mapping"]
+[ext_resource type="Texture2D" path="res://crystals/visuals/bleed.svg" id="3_visual"]
+
+[sub_resource type="Resource" id="Upgrade1DirectDamage"]
+script = ExtResource("2_mapping")
+tower_upgrade_slot = 0
+display_name = "Direct Damage"
+affected_stat = 0
+operation = 1
+amount = 1.2
+
+[sub_resource type="Resource" id="Upgrade2BleedDamage"]
+script = ExtResource("2_mapping")
+tower_upgrade_slot = 1
+display_name = "Bleed Damage"
+affected_stat = 5
+operation = 1
+amount = 1.2
+
+[sub_resource type="Resource" id="Upgrade3BleedDuration"]
+script = ExtResource("2_mapping")
+tower_upgrade_slot = 2
+display_name = "Bleed Duration"
+affected_stat = 6
+operation = 0
+amount = 1.0
+
+[resource]
+script = ExtResource("1_crystal")
+crystal_id = &"bleed"
+display_name = "Bleed Crystal"
+visual_texture = ExtResource("3_visual")
+damage = 5
+attack_speed = 1.0
+attack_range = 180.0
+attack_behavior = 2
+crystal_level_growth = 1.1
+bleed_max_hp_fraction_per_second = 0.05
+bleed_duration = 10.0
+tower_upgrade_mappings = Array[ExtResource("2_mapping")]([SubResource("Upgrade1DirectDamage"), SubResource("Upgrade2BleedDamage"), SubResource("Upgrade3BleedDuration")])

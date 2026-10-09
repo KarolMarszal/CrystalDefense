@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="WaveConfig" load_steps=13 format=3]
+
+[ext_resource type="Script" path="res://waves/WaveConfig.gd" id="1_wave_config"]
+[ext_resource type="Script" path="res://waves/WaveEnemyGroup.gd" id="2_enemy_group"]
+[ext_resource type="Resource" path="res://enemies/Goblin.tres" id="3_goblin"]
+[ext_resource type="Resource" path="res://enemies/Kobold.tres" id="4_kobold"]
+[ext_resource type="Resource" path="res://enemies/Orc.tres" id="5_orc"]
+[ext_resource type="Resource" path="res://enemies/Skeleton.tres" id="6_skeleton"]
+[ext_resource type="Resource" path="res://enemies/Troll.tres" id="7_troll"]
+
+[sub_resource type="Resource" id="GoblinGroup"]
+script = ExtResource("2_enemy_group")
+enemy_data = ExtResource("3_goblin")
+quantity = 3
+
+[sub_resource type="Resource" id="KoboldGroup"]
+script = ExtResource("2_enemy_group")
+enemy_data = ExtResource("4_kobold")
+quantity = 5
+
+[sub_resource type="Resource" id="OrcGroup"]
+script = ExtResource("2_enemy_group")
+enemy_data = ExtResource("5_orc")
+quantity = 2
+
+[sub_resource type="Resource" id="SkeletonGroup"]
+script = ExtResource("2_enemy_group")
+enemy_data = ExtResource("6_skeleton")
+quantity = 1
+
+[sub_resource type="Resource" id="TrollGroup"]
+script = ExtResource("2_enemy_group")
+enemy_data = ExtResource("7_troll")
+quantity = 1
+
+[resource]
+script = ExtResource("1_wave_config")
+wave_number = 9
+groups = Array[ExtResource("2_enemy_group")]([SubResource("GoblinGroup"), SubResource("KoboldGroup"), SubResource("OrcGroup"), SubResource("SkeletonGroup"), SubResource("TrollGroup")])

@@ -1,0 +1,39 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/Castle.gd" id="1_castle"]
+
+[node name="Castle" type="Node2D"]
+script = ExtResource("1_castle")
+
+[node name="Treasury" type="Node2D" parent="."]
+z_index = 2
+
+[node name="LeftTower" type="Polygon2D" parent="."]
+position = Vector2(-30, 4)
+polygon = PackedVector2Array(-15, -25, 15, -25, 15, 44, -15, 44)
+color = Color(0.49, 0.43, 0.34, 1)
+
+[node name="CenterKeep" type="Polygon2D" parent="."]
+position = Vector2(0, 10)
+polygon = PackedVector2Array(-20, -35, 20, -35, 34, -19, 34, 39, -34, 39, -34, -19)
+color = Color(0.62, 0.55, 0.42, 1)
+
+[node name="RightTower" type="Polygon2D" parent="."]
+position = Vector2(30, 4)
+polygon = PackedVector2Array(-15, -25, 15, -25, 15, 44, -15, 44)
+color = Color(0.49, 0.43, 0.34, 1)
+
+[node name="LeftCrenel" type="Polygon2D" parent="."]
+position = Vector2(-30, -25)
+polygon = PackedVector2Array(-15, -8, 15, -8, 15, 2, 8, 2, 8, -3, 2, -3, 2, 2, -4, 2, -4, -3, -10, -3, -10, 2, -15, 2)
+color = Color(0.7, 0.63, 0.49, 1)
+
+[node name="RightCrenel" type="Polygon2D" parent="."]
+position = Vector2(30, -25)
+polygon = PackedVector2Array(-15, -8, 15, -8, 15, 2, 8, 2, 8, -3, 2, -3, 2, 2, -4, 2, -4, -3, -10, -3, -10, 2, -15, 2)
+color = Color(0.7, 0.63, 0.49, 1)
+
+[node name="Gate" type="Polygon2D" parent="."]
+position = Vector2(0, 27)
+polygon = PackedVector2Array(-10, 17, -10, -3, -7, -10, 0, -14, 7, -10, 10, -3, 10, 17)
+color = Color(0.25, 0.19, 0.13, 1)

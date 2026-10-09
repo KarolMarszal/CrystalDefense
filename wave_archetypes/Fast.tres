@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="WaveArchetype" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://wave_archetypes/WaveArchetype.gd" id="1_archetype"]
+
+[resource]
+script = ExtResource("1_archetype")
+archetype_id = &"FAST"
+display_name = "FAST"
+selection_weight = 15.0
+movement_speed_bias = 0.95
+repetition_resistance = 0.9

@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="EnemyData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://enemies/EnemyData.gd" id="1_enemy_data"]
+[ext_resource type="Texture2D" path="res://enemies/visuals/goblin.svg" id="2_visual"]
+
+[resource]
+script = ExtResource("1_enemy_data")
+enemy_id = &"goblin"
+display_name = "Goblin"
+base_hp = 100
+base_speed = 100.0
+gold_reward = 10
+visual_texture = ExtResource("2_visual")
+visual_scale = 0.27
+difficulty_cost = 2
+unlock_wave = 1
+selection_weight = 1.5
+can_carry_trophy = true
+can_pickup_dropped_trophy = true

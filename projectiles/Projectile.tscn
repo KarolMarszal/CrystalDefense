@@ -1,0 +1,13 @@
+[gd_scene format=3 uid="uid://u504aie357hc"]
+
+[ext_resource type="Script" uid="uid://4qujtsdsgp5r" path="res://projectiles/projectile.gd" id="1_t7eop"]
+
+[node name="Projectile" type="Node2D" unique_id=464805811]
+script = ExtResource("1_t7eop")
+
+[node name="ColorRect" type="ColorRect" parent="." unique_id=1691100471]
+offset_left = -5.0
+offset_top = -5.0
+offset_right = 5.0
+offset_bottom = 5.0
+color = Color(1, 0.7176471, 0.101960786, 1)

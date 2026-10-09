@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="WaveConfig" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://waves/WaveConfig.gd" id="1_wave_config"]
+[ext_resource type="Script" path="res://waves/WaveEnemyGroup.gd" id="2_enemy_group"]
+[ext_resource type="Resource" path="res://enemies/Orc.tres" id="3_orc_data"]
+[ext_resource type="Resource" path="res://enemies/Goblin.tres" id="4_goblin_data"]
+
+[sub_resource type="Resource" id="GoblinGroup"]
+script = ExtResource("2_enemy_group")
+enemy_data = ExtResource("4_goblin_data")
+quantity = 7
+
+[sub_resource type="Resource" id="OrcGroup"]
+script = ExtResource("2_enemy_group")
+enemy_data = ExtResource("3_orc_data")
+quantity = 5
+
+[resource]
+script = ExtResource("1_wave_config")
+wave_number = 2
+groups = Array[ExtResource("2_enemy_group")]([SubResource("GoblinGroup"), SubResource("OrcGroup")])

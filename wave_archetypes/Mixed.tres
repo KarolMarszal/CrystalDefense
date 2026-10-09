@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="WaveArchetype" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://wave_archetypes/WaveArchetype.gd" id="1_archetype"]
+
+[resource]
+script = ExtResource("1_archetype")
+archetype_id = &"MIXED"
+display_name = "MIXED"
+selection_weight = 15.0
+diversity_bonus = 2.0
+minimum_distinct_enemy_types = 3
+repetition_resistance = 0.2

@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="WaveConfig" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://waves/WaveConfig.gd" id="1_wave_config"]
+[ext_resource type="Script" path="res://waves/WaveEnemyGroup.gd" id="2_enemy_group"]
+[ext_resource type="Resource" path="res://enemies/Skeleton.tres" id="3_enemy_data"]
+
+[sub_resource type="Resource" id="EnemyGroup"]
+script = ExtResource("2_enemy_group")
+enemy_data = ExtResource("3_enemy_data")
+quantity = 6
+
+[resource]
+script = ExtResource("1_wave_config")
+wave_number = 4
+groups = Array[ExtResource("2_enemy_group")]([SubResource("EnemyGroup")])

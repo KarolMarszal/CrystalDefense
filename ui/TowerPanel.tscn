@@ -1,0 +1,165 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://ui/TowerPanel.gd" id="1_tower_panel"]
+
+[node name="TowerPanel" type="PanelContainer"]
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -220.0
+offset_top = -542.0
+offset_right = 220.0
+offset_bottom = -16.0
+grow_horizontal = 2
+mouse_filter = 0
+script = ExtResource("1_tower_panel")
+
+[node name="MarginContainer" type="MarginContainer" parent="."]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 6
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 6
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="Header" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="TowerTitle" type="Label" parent="MarginContainer/VBoxContainer/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 18
+text = "Tower"
+horizontal_alignment = 1
+
+[node name="CloseButton" type="Button" parent="MarginContainer/VBoxContainer/Header"]
+custom_minimum_size = Vector2(32, 32)
+layout_mode = 2
+text = "X"
+
+[node name="CombatStatsLabel" type="Label" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "Damage: 25  |  Attack Speed: 1.0/s  |  Range: 180"
+horizontal_alignment = 1
+
+[node name="DamageRow" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="DamageLabel" type="Label" parent="MarginContainer/VBoxContainer/DamageRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 14
+text = "Damage: 25"
+
+[node name="DamageUpgradeButton" type="Button" parent="MarginContainer/VBoxContainer/DamageRow"]
+custom_minimum_size = Vector2(118, 44)
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Upgrade 30g"
+
+[node name="AttackSpeedRow" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="AttackSpeedLabel" type="Label" parent="MarginContainer/VBoxContainer/AttackSpeedRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 14
+text = "Attack Speed: 1.0/s"
+
+[node name="AttackSpeedUpgradeButton" type="Button" parent="MarginContainer/VBoxContainer/AttackSpeedRow"]
+custom_minimum_size = Vector2(118, 44)
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Upgrade 40g"
+
+[node name="RangeRow" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="RangeLabel" type="Label" parent="MarginContainer/VBoxContainer/RangeRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 14
+text = "Range: 180"
+
+[node name="RangeUpgradeButton" type="Button" parent="MarginContainer/VBoxContainer/RangeRow"]
+custom_minimum_size = Vector2(118, 44)
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Upgrade 35g"
+
+[node name="MainSocketLabel" type="Label" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Main Socket: Empty"
+horizontal_alignment = 1
+
+[node name="InstallRapidFireButton" type="Button" parent="MarginContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "INSTALL RAPID FIRE CRYSTAL"
+
+[node name="InstallSlowButton" type="Button" parent="MarginContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "INSTALL SLOW CRYSTAL"
+
+[node name="InstallBleedButton" type="Button" parent="MarginContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "INSTALL BLEED CRYSTAL"
+
+[node name="RemoveCrystalButton" type="Button" parent="MarginContainer/VBoxContainer"]
+visible = false
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "REMOVE CRYSTAL"
+
+[node name="TrophyCarrierPriority" type="CheckBox" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Prioritize Trophy Carriers"
+button_pressed = true
+
+[node name="PriorityLabel" type="Label" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Target Priority"
+horizontal_alignment = 1
+
+[node name="PriorityButtons" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="NearestButton" type="Button" parent="MarginContainer/VBoxContainer/PriorityButtons"]
+custom_minimum_size = Vector2(96, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 12
+text = "NEAREST"
+
+[node name="FirstButton" type="Button" parent="MarginContainer/VBoxContainer/PriorityButtons"]
+custom_minimum_size = Vector2(96, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 12
+text = "FIRST"
+
+[node name="StrongestButton" type="Button" parent="MarginContainer/VBoxContainer/PriorityButtons"]
+custom_minimum_size = Vector2(96, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 12
+text = "STRONGEST"

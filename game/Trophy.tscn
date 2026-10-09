@@ -1,0 +1,17 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/Trophy.gd" id="1_trophy"]
+
+[node name="Trophy" type="Node2D"]
+z_as_relative = false
+z_index = 20
+script = ExtResource("1_trophy")
+
+[node name="Icon" type="Polygon2D" parent="."]
+polygon = PackedVector2Array(-4, -11, 4, -11, 3, -4, 8, -4, 6, 1, 2, 4, 2, 8, 7, 8, 7, 11, -7, 11, -7, 8, -2, 8, -2, 4, -6, 1, -8, -4, -3, -4)
+color = Color(1, 0.78, 0.12, 1)
+
+[node name="Highlight" type="Polygon2D" parent="."]
+position = Vector2(-1, -7)
+polygon = PackedVector2Array(-1, -2, 1, -2, 0, 1)
+color = Color(1, 0.95, 0.55, 1)

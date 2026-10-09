@@ -1,0 +1,40 @@
+# Godot editor and imported cache
+.godot/
+
+# Exported builds and generated reports
+/builds/
+/exports/
+/reports/
+/export.cfg
+/export_presets.cfg
+
+# Godot .NET build output
+.mono/
+bin/
+obj/
+*.csproj.user
+
+# Android/Gradle generated files
+/android/.gradle/
+/android/build/
+/android/.cxx/
+/android/local.properties
+
+# Local environment and signing credentials
+.env
+.env.*
+!.env.example
+*.keystore
+*.jks
+*.p12
+
+# Temporary and backup files
+*.tmp
+*.bak
+*.bak.tmp
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo

@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="WaveArchetype" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://wave_archetypes/WaveArchetype.gd" id="1_archetype"]
+
+[resource]
+script = ExtResource("1_archetype")
+archetype_id = &"STANDARD"
+display_name = "STANDARD"
+selection_weight = 35.0
+repetition_resistance = 0.4
