@@ -12,8 +12,11 @@ var wave_number: int
 var config: WaveConfig
 var total_enemies: int = 0
 var spawned_enemies: int = 0
+var boss_definitions: Array[BossData] = []
 var group_index: int = 0
 var spawned_in_group: int = 0
+var interleaved_group_spawn_counts: Array[int] = []
+var last_interleaved_group_index: int = -1
 var spawn_timer: float = 0.0
 var state: State = State.NOT_STARTED
 var active_enemies: Dictionary = {}

@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="BossData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://enemies/BossData.gd" id="1_boss"]
+[ext_resource type="Resource" path="res://enemies/Orc.tres" id="2_visual"]
+
+[resource]
+script = ExtResource("1_boss")
+boss_id = &"orc_chief"
+display_name = "Orc Chief"
+visual_source = ExtResource("2_visual")
+base_hp = 2500
+base_speed = 55.0
+hp_growth_per_wave = 0.14
+speed_growth_per_wave = 0.002
+trophy_capacity = 2
+base_gold_reward = 180
+base_essence_reward = 30
+ability = 2
+ability_radius = 180.0
+ability_multiplier = 0.85
+enrage_multiplier = 0.9
+damage_reduction = 0.25

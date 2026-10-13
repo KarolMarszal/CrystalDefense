@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="BossData" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://enemies/BossData.gd" id="1_boss"]
+[ext_resource type="Resource" path="res://enemies/Kobold.tres" id="2_visual"]
+
+[resource]
+script = ExtResource("1_boss")
+boss_id = &"snake"
+display_name = "Snake"
+visual_source = ExtResource("2_visual")
+base_hp = 1600
+base_speed = 100.0
+hp_growth_per_wave = 0.1
+speed_growth_per_wave = 0.006
+trophy_capacity = 2
+base_gold_reward = 160
+base_essence_reward = 28
+ability = 7
+ability_radius = 200.0
+ability_multiplier = 0.5
+enrage_multiplier = 0.65
+enraged_ability_radius = 250.0
+tower_debuff_duration = 8.0
+poison_immune = true

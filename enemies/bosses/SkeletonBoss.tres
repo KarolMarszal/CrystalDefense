@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="BossData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://enemies/BossData.gd" id="1_boss"]
+[ext_resource type="Resource" path="res://enemies/Skeleton.tres" id="2_visual"]
+
+[resource]
+script = ExtResource("1_boss")
+boss_id = &"skeleton_boss"
+display_name = "Skeleton"
+visual_source = ExtResource("2_visual")
+base_hp = 1500
+base_speed = 80.0
+hp_growth_per_wave = 0.11
+speed_growth_per_wave = 0.003
+trophy_capacity = 2
+base_gold_reward = 140
+base_essence_reward = 25
+ability = 4
+skeleton_threshold_heal_fraction = 0.2

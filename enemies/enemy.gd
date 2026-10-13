@@ -6,7 +6,15 @@ enum MovementDirection {
 	RETURNING_TO_CAMP
 }
 
+enum SummonMovementMode {
+	NONE,
+	INTERCEPT_BOSS,
+	FOLLOW_BOSS
+}
+
 signal became_inactive
+signal final_death
+signal resurrected
 
 @export var enemy_data: EnemyData
 @export_range(0.0, 30.0, 0.1) var theft_duration: float = 1.0
@@ -16,6 +24,8 @@ var active_modifiers: Array[EnemyModifierData] = []
 var castle: Castle
 var camp: EnemyCamp
 var carried_trophies: Array[Trophy] = []
+var summoner_boss: Node2D
+var summon_movement_mode: SummonMovementMode = SummonMovementMode.NONE
 
 var carried_trophy_count: int:
 	get:
@@ -43,9 +53,12 @@ var speed: float
 var effective_speed: float:
 	get:
 		var strongest_slow := 0.0
+		var speed_multiplier := 1.0
+		for multiplier in _speed_multipliers.values():
+			speed_multiplier *= float(multiplier)
 		for slow_data in _movement_slows.values():
 			strongest_slow = maxf(strongest_slow, float(slow_data["fraction"]))
-		return maxf(speed * (1.0 - strongest_slow), 0.0)
+		return maxf(speed * speed_multiplier * (1.0 - strongest_slow), 0.0)
 
 var wave_number: int = 0
 var wave_gold_multiplier: float = 1.0
@@ -74,11 +87,16 @@ var _is_depositing: bool = false
 var _deposit_tween: Tween
 var _theft_elapsed: float = 0.0
 var _theft_attempted: bool = false
+var _movement_stop_remaining: float = 0.0
 var _movement_slows: Dictionary = {}
-var _bleed_max_hp_fraction_per_second: float = 0.0
-var _bleed_remaining: float = 0.0
-var _bleed_tick_elapsed: float = 0.0
-var _bleed_damage_remainder: float = 0.0
+var _speed_multipliers: Dictionary = {}
+var _damage_taken_multipliers: Dictionary = {}
+var _damage_over_time_effects: Dictionary = {}
+var _bleed_remaining: float:
+	get:
+		return float(
+			_damage_over_time_effects.get(&"bleed", {}).get("remaining", 0.0)
+		)
 
 @onready var _visual: Sprite2D = $Visual
 
@@ -119,12 +137,48 @@ func _ready() -> void:
 	_visual.scale = Vector2.ONE * enemy_data.visual_scale
 	add_to_group("enemies")
 	update_health_bar()
-	print("Enemy created. HP: ", hp)
 
 
 func _exit_tree() -> void:
 	_movement_slows.clear()
+	_speed_multipliers.clear()
+	_damage_taken_multipliers.clear()
 	_clear_bleed()
+	_clear_poison()
+	_damage_over_time_effects.erase(&"self_damage")
+
+
+func set_speed_multiplier(source_id: int, multiplier: float) -> void:
+	if is_dead or not is_finite(multiplier):
+		return
+	_speed_multipliers[source_id] = maxf(multiplier, 0.0)
+
+
+func remove_speed_multiplier(source_id: int) -> void:
+	_speed_multipliers.erase(source_id)
+
+
+func stop_movement_for(duration: float) -> void:
+	if is_dead or not is_finite(duration) or duration <= 0.0:
+		return
+	_movement_stop_remaining = maxf(_movement_stop_remaining, duration)
+
+
+func set_damage_taken_multiplier(source_id: int, multiplier: float) -> void:
+	if is_dead or not is_finite(multiplier):
+		return
+	_damage_taken_multipliers[source_id] = clampf(multiplier, 0.0, 1.0)
+
+
+func remove_damage_taken_multiplier(source_id: int) -> void:
+	_damage_taken_multipliers.erase(source_id)
+
+
+func _get_damage_taken_multiplier() -> float:
+	var multiplier := 1.0
+	for source_multiplier in _damage_taken_multipliers.values():
+		multiplier *= float(source_multiplier)
+	return clampf(multiplier, 0.0, 1.0)
 
 
 func set_movement_slow(source_id: int, slow_fraction: float) -> void:
@@ -147,6 +201,49 @@ func remove_movement_slow(source_id: int, linger_duration: float = 0.0) -> void:
 
 
 func apply_bleed(max_hp_fraction_per_second: float, duration: float) -> void:
+	_apply_damage_over_time(
+		&"bleed",
+		max_hp_fraction_per_second,
+		duration
+	)
+
+
+func apply_continuous_self_damage(max_hp_fraction_per_second: float) -> void:
+	if (
+		is_dead
+		or not is_finite(max_hp_fraction_per_second)
+		or max_hp_fraction_per_second <= 0.0
+	):
+		return
+
+	_damage_over_time_effects[&"self_damage"] = {
+		"elapsed": 0.0,
+		"damage_remainder": 0.0,
+		"fraction_per_second": clampf(
+			max_hp_fraction_per_second,
+			0.0,
+			1.0
+		),
+		"remaining": -1.0
+	}
+
+
+func apply_poison(max_hp_fraction_per_second: float, duration: float) -> void:
+	if is_immune_to_poison():
+		_on_poison_blocked()
+		return
+	_apply_damage_over_time(
+		&"poison",
+		max_hp_fraction_per_second,
+		duration
+	)
+
+
+func _apply_damage_over_time(
+	effect_id: StringName,
+	max_hp_fraction_per_second: float,
+	duration: float
+) -> void:
 	if (
 		is_dead
 		or not is_finite(max_hp_fraction_per_second)
@@ -156,29 +253,55 @@ func apply_bleed(max_hp_fraction_per_second: float, duration: float) -> void:
 	):
 		return
 
-	if _bleed_remaining <= 0.0:
-		_bleed_tick_elapsed = 0.0
-		_bleed_damage_remainder = 0.0
-	_bleed_max_hp_fraction_per_second = clampf(
+	var effect: Dictionary = _damage_over_time_effects.get(effect_id, {})
+	if float(effect.get("remaining", 0.0)) <= 0.0:
+		effect["elapsed"] = 0.0
+		effect["damage_remainder"] = 0.0
+	effect["fraction_per_second"] = clampf(
 		max_hp_fraction_per_second,
 		0.0,
 		1.0
 	)
-	_bleed_remaining = duration
+	effect["remaining"] = duration
+	_damage_over_time_effects[effect_id] = effect
+
+
+func is_immune_to_poison() -> bool:
+	return false
+
+
+func _on_poison_blocked() -> void:
+	pass
 
 
 func take_damage(amount: int):
-	hp -= amount
+	if is_dead or amount <= 0:
+		return
+	var previous_hp := hp
+	var effective_damage := roundi(float(amount) * _get_damage_taken_multiplier())
+	hp = maxi(hp - effective_damage, 0)
 
-	if hp < 0:
-		hp = 0
-
+	_on_damage_applied(previous_hp)
 	update_health_bar()
-
-	print("enemy took ", amount, " damage. Hp left: ", hp)
+	BossAbilityDebug.log_damage(
+		_get_damage_target_display_name(),
+		amount,
+		maxi(previous_hp - hp, 0),
+		previous_hp,
+		hp
+	)
 
 	if hp <= 0:
 		die()
+
+
+func _on_damage_applied(_previous_hp: int) -> void:
+	pass
+
+
+func _get_damage_target_display_name() -> String:
+	return enemy_data.display_name if enemy_data != null else "Unknown"
+
 
 func die():
 	if is_dead:
@@ -198,6 +321,8 @@ func _process_final_death() -> void:
 	is_dead = true
 	_movement_slows.clear()
 	_clear_bleed()
+	_clear_poison()
+	_damage_over_time_effects.erase(&"self_damage")
 	if is_instance_valid(_deposit_tween) and _deposit_tween.is_running():
 		_deposit_tween.kill()
 	_deposit_tween = null
@@ -206,9 +331,46 @@ func _process_final_death() -> void:
 		return
 	var final_reward := floori(float(gold_reward) * wave_gold_multiplier)
 	GoldManager.add_gold(final_reward)
+	_award_essence_points()
+	final_death.emit()
 	_mark_inactive()
-	print("Enemy died!")
 	queue_free()
+
+
+func _award_essence_points() -> void:
+	if enemy_data == null or enemy_data.essence_points <= 0:
+		return
+
+	var awarded_essence := CrystalInventory.add_essence_points(
+		enemy_data.essence_points
+	)
+	if awarded_essence > 0:
+		_show_essence_drop(awarded_essence)
+
+
+# The balance is already updated; this is only visual feedback at the kill site.
+func _show_essence_drop(amount: int) -> void:
+	var container: Node = get_tree().current_scene
+	if container == null:
+		container = get_parent()
+	if container == null:
+		return
+
+	var drop := Label.new()
+	drop.text = "+%d Essence" % amount
+	drop.top_level = true
+	drop.z_index = 100
+	drop.add_theme_font_size_override("font_size", 20)
+	drop.add_theme_color_override("font_color", Color(0.66, 0.89, 1.0))
+	drop.add_theme_color_override("font_outline_color", Color.BLACK)
+	drop.add_theme_constant_override("outline_size", 4)
+	container.add_child(drop)
+	drop.global_position = global_position + Vector2(-30.0, -40.0)
+	var tween := drop.create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(drop, "global_position:y", drop.global_position.y - 40.0, 1.0)
+	tween.tween_property(drop, "modulate:a", 0.0, 1.0)
+	tween.chain().tween_callback(drop.queue_free)
 
 
 func _try_resurrect() -> bool:
@@ -224,6 +386,7 @@ func _try_resurrect() -> bool:
 	hp = maxi(roundi(max_hp * hp_fraction), 1)
 	update_health_bar()
 	_play_resurrection_feedback()
+	resurrected.emit()
 	return true
 
 
@@ -239,7 +402,16 @@ func _process(delta: float) -> void:
 		return
 	_process_movement_slows(delta)
 	_process_bleed(delta)
+	_process_poison(delta)
+	_process_damage_over_time(&"self_damage", delta)
 	if is_dead or is_queued_for_deletion():
+		return
+	if _movement_stop_remaining > 0.0:
+		_movement_stop_remaining = maxf(_movement_stop_remaining - delta, 0.0)
+		if _movement_stop_remaining > 0.0:
+			return
+	if _process_summon_movement(delta):
+		_regenerate(delta)
 		return
 
 	if _has_reached_start:
@@ -264,7 +436,6 @@ func _process(delta: float) -> void:
 			return
 
 		if path_distance >= max_distance:
-			print("Enemy reached the end.")
 			_has_reached_castle = true
 			_mark_inactive()
 			_process_theft(0.0)
@@ -272,6 +443,102 @@ func _process(delta: float) -> void:
 			return
 
 	_regenerate(delta)
+
+
+func _process_summon_movement(delta: float) -> bool:
+	if summon_movement_mode == SummonMovementMode.NONE:
+		if (
+			is_instance_valid(summoner_boss)
+			and not bool(summoner_boss.get("is_dead"))
+			and int(summoner_boss.get("movement_direction"))
+				== MovementDirection.RETURNING_TO_CAMP
+			and movement_direction == MovementDirection.MOVING_TO_CASTLE
+		):
+			summon_movement_mode = SummonMovementMode.INTERCEPT_BOSS
+			BossAbilityDebug.log(
+				summoner_boss,
+				"goblin_interception",
+				"started",
+				"summon=%s" % name
+			)
+		else:
+			return false
+
+	if (
+		not is_instance_valid(summoner_boss)
+		or bool(summoner_boss.get("is_dead"))
+	):
+		if summon_movement_mode == SummonMovementMode.INTERCEPT_BOSS:
+			movement_direction = MovementDirection.MOVING_TO_CASTLE
+			_returning_to_start = false
+		summon_movement_mode = SummonMovementMode.NONE
+		summoner_boss = null
+		return false
+
+	var boss_path := summoner_boss.get("path") as Curve2D
+	if path == null or boss_path != path:
+		BossAbilityDebug.log(
+			summoner_boss,
+			"goblin_interception",
+			"rejected",
+			"reason=invalid_or_mismatched_path summon=%s" % name
+		)
+		summon_movement_mode = SummonMovementMode.NONE
+		summoner_boss = null
+		return false
+
+	if summon_movement_mode == SummonMovementMode.INTERCEPT_BOSS:
+		if (
+			int(summoner_boss.get("movement_direction"))
+			!= MovementDirection.RETURNING_TO_CAMP
+		):
+			summon_movement_mode = SummonMovementMode.NONE
+			return false
+		var boss_path_distance := float(summoner_boss.get("path_distance"))
+		if path_distance > boss_path_distance:
+			path_distance = maxf(
+				path_distance - effective_speed * delta,
+				boss_path_distance
+			)
+		else:
+			path_distance = minf(
+				path_distance + effective_speed * delta,
+				boss_path_distance
+			)
+		position = path.sample_baked(path_distance)
+		if (
+			global_position.distance_to(summoner_boss.global_position) <= 28.0
+			or absf(path_distance - boss_path_distance) <= 28.0
+		):
+			movement_direction = MovementDirection.RETURNING_TO_CAMP
+			_returning_to_start = true
+			summon_movement_mode = SummonMovementMode.FOLLOW_BOSS
+			BossAbilityDebug.log(
+				summoner_boss,
+				"goblin_interception",
+				"escort_started",
+				"summon=%s path_distance=%.1f" % [name, path_distance]
+			)
+		return true
+
+	if (
+		int(summoner_boss.get("movement_direction"))
+		!= MovementDirection.RETURNING_TO_CAMP
+	):
+		summon_movement_mode = SummonMovementMode.NONE
+		summoner_boss = null
+		return false
+
+	var follow_distance := maxf(
+		float(summoner_boss.get("path_distance")) - 28.0,
+		0.0
+	)
+	if path_distance > follow_distance:
+		path_distance = maxf(path_distance - effective_speed * delta, follow_distance)
+	else:
+		path_distance = minf(path_distance + effective_speed * delta, follow_distance)
+	position = path.sample_baked(path_distance)
+	return true
 
 
 func _process_theft(delta: float) -> void:
@@ -285,28 +552,20 @@ func _process_theft(delta: float) -> void:
 	_theft_attempted = true
 	if not is_instance_valid(castle):
 		push_warning("Enemy reached the Castle without a valid Castle reference.")
-		_start_return_phase()
+		start_return_to_camp()
 		return
 
 	if not _can_carry_trophy():
-		_start_return_phase()
+		start_return_to_camp()
 		return
 
 	var stolen_trophy := castle.try_steal_trophy()
 	if stolen_trophy == null:
-		print(
-			"[Enemy %s] No Trophy available. Returning without Trophy."
-			% _get_debug_identifier()
-		)
-		_start_return_phase()
+		start_return_to_camp()
 		return
 
 	_attach_trophy(stolen_trophy)
-	print(
-		"[Enemy %s] Stole Trophy. Carrying 1 Trophy. Returning to start."
-		% _get_debug_identifier()
-	)
-	_start_return_phase()
+	start_return_to_camp()
 
 
 func _can_carry_trophy() -> bool:
@@ -357,17 +616,12 @@ func _try_pick_up_dropped_trophy() -> bool:
 
 	var was_moving_to_castle := movement_direction == MovementDirection.MOVING_TO_CASTLE
 	_attach_trophy(closest_trophy)
-	var message: String
 	if was_moving_to_castle:
-		_start_return_phase()
-		message = "[Enemy %s] Picked up dropped Trophy. Returning to camp."
-	else:
-		message = "[Enemy %s] Picked up dropped Trophy while returning."
-	print(message % _get_debug_identifier())
+		start_return_to_camp()
 	return true
 
 
-func _start_return_phase() -> void:
+func start_return_to_camp() -> void:
 	if _returning_to_start:
 		return
 
@@ -386,7 +640,6 @@ func _drop_carried_trophies() -> bool:
 		push_error("Cannot drop carried Trophy because no world container is available.")
 		return false
 
-	var dropped_trophy_count := 0
 	while not carried_trophies.is_empty():
 		var trophy: Trophy = carried_trophies.pop_back()
 		if not is_instance_valid(trophy):
@@ -396,13 +649,6 @@ func _drop_carried_trophies() -> bool:
 		trophy.reparent(drop_container, true)
 		trophy.global_position = drop_position
 		trophy.set_state(Trophy.State.DROPPED)
-		dropped_trophy_count += 1
-
-	if dropped_trophy_count > 0:
-		print(
-			"[Enemy %s] Died while carrying Trophy. Trophy dropped at current position."
-			% _get_debug_identifier()
-		)
 	return true
 
 
@@ -430,7 +676,6 @@ func _process_return_path(delta: float) -> void:
 
 func _finalize_return() -> void:
 	if not is_carrying_trophy:
-		print("[Enemy %s] Reached start without Trophy." % _get_debug_identifier())
 		queue_free()
 		return
 
@@ -476,7 +721,12 @@ func _complete_trophy_deposit(trophy: Trophy) -> void:
 
 	carried_trophies.erase(trophy)
 	castle.register_permanent_trophy_loss(trophy.trophy_id)
+	_on_trophy_permanently_lost(trophy)
 	_deposit_carried_trophies()
+
+
+func _on_trophy_permanently_lost(_trophy: Trophy) -> void:
+	pass
 
 
 func _get_debug_identifier() -> String:
@@ -516,27 +766,46 @@ func _regenerate(delta: float) -> void:
 
 
 func _process_bleed(delta: float) -> void:
-	if _bleed_remaining <= 0.0 or delta <= 0.0:
+	_process_damage_over_time(&"bleed", delta)
+
+
+func _process_poison(delta: float) -> void:
+	_process_damage_over_time(&"poison", delta)
+
+
+func _process_damage_over_time(effect_id: StringName, delta: float) -> void:
+	if not _damage_over_time_effects.has(effect_id) or delta <= 0.0:
 		return
 
-	var active_delta := minf(delta, _bleed_remaining)
-	_bleed_tick_elapsed += active_delta
-	_bleed_remaining = maxf(_bleed_remaining - delta, 0.0)
+	var effect: Dictionary = _damage_over_time_effects[effect_id]
+	var remaining := float(effect["remaining"])
+	var elapsed := float(effect["elapsed"])
+	var damage_remainder := float(effect["damage_remainder"])
+	if remaining < 0.0:
+		elapsed += delta
+	else:
+		elapsed += minf(delta, remaining)
+		remaining = maxf(remaining - delta, 0.0)
 
-	while _bleed_tick_elapsed >= 1.0:
-		_bleed_tick_elapsed -= 1.0
-		_bleed_damage_remainder += (
-			float(max_hp) * _bleed_max_hp_fraction_per_second
+	while elapsed >= 1.0:
+		elapsed -= 1.0
+		damage_remainder += (
+			float(max_hp) * float(effect["fraction_per_second"])
 		)
-		var tick_damage := floori(_bleed_damage_remainder)
-		_bleed_damage_remainder -= tick_damage
+		var tick_damage := floori(damage_remainder)
+		damage_remainder -= tick_damage
 		if tick_damage > 0:
 			take_damage(tick_damage)
 			if is_dead or is_queued_for_deletion():
 				return
 
-	if _bleed_remaining == 0.0:
-		_clear_bleed()
+	if remaining == 0.0:
+		_damage_over_time_effects.erase(effect_id)
+		return
+	effect["elapsed"] = elapsed
+	effect["damage_remainder"] = damage_remainder
+	effect["remaining"] = remaining
+	_damage_over_time_effects[effect_id] = effect
 
 
 func _process_movement_slows(delta: float) -> void:
@@ -559,10 +828,12 @@ func _process_movement_slows(delta: float) -> void:
 
 
 func _clear_bleed() -> void:
-	_bleed_max_hp_fraction_per_second = 0.0
-	_bleed_remaining = 0.0
-	_bleed_tick_elapsed = 0.0
-	_bleed_damage_remainder = 0.0
+	_damage_over_time_effects.erase(&"bleed")
+
+
+func _clear_poison() -> void:
+	_damage_over_time_effects.erase(&"poison")
+
 
 func update_health_bar():
 	$HealthBar.max_value = max_hp

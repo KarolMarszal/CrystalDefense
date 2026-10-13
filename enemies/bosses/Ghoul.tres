@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="BossData" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://enemies/BossData.gd" id="1_boss"]
+[ext_resource type="Resource" path="res://enemies/Skeleton.tres" id="2_visual"]
+[ext_resource type="Resource" path="res://enemies/Skeleton.tres" id="3_escort"]
+
+[resource]
+script = ExtResource("1_boss")
+boss_id = &"ghoul"
+display_name = "Ghoul"
+visual_source = ExtResource("2_visual")
+base_hp = 1800
+base_speed = 75.0
+hp_growth_per_wave = 0.12
+speed_growth_per_wave = 0.003
+trophy_capacity = 1
+base_gold_reward = 160
+base_essence_reward = 28
+ability = 5
+summon_enemy_data = ExtResource("3_escort")
+ability_multiplier = 0.08
+summon_count = 2

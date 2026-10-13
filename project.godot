@@ -19,6 +19,7 @@ config/icon="res://assets/icon.svg"
 
 GoldManager="*res://managers/gold_manager.gd"
 CrystalInventory="*res://managers/CrystalInventoryManager.gd"
+GameSpeedManager="*res://managers/GameSpeedManager.gd"
 
 [display]
 

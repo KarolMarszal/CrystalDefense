@@ -2,7 +2,7 @@ extends Node
 
 signal gold_changed(new_amount: int)
 
-const STARTING_RUN_GOLD: int = 1500
+const STARTING_RUN_GOLD: int = 300
 
 var _run_gold: int = 0
 

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <g fill="none" stroke="#342a24" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M64 7v114M7 64h114M23 23l82 82m0-82L23 105"/>
+  </g>
+  <g fill="none" stroke="#d8c69b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M64 8 58 20l6 7 6-7zM64 120l-6-12 6-7 6 7zM8 64l12-6 7 6-7 6zM120 64l-12-6-7 6 7 6z"/>
+    <path d="M23 23l13 3 2 10-10 2zM105 23l-13 3-2 10 10 2zM23 105l13-3 2-10-10-2zM105 105l-13-3-2-10 10-2z"/>
+    <path d="M64 27q-20 0-29 8 1 19 29 29 28-10 29-29-9-8-29-8z"/>
+    <path d="M64 45q-31 0-44 12 1 28 44 44 43-16 44-44-13-12-44-12z"/>
+    <path d="M64 65q-40 0-56 12 2 20 56 39 54-19 56-39-16-12-56-12z"/>
+  </g>
+  <g fill="#ead7ad" stroke="#342a24" stroke-width="2">
+    <circle cx="64" cy="8" r="4"/>
+    <circle cx="120" cy="64" r="4"/>
+    <circle cx="64" cy="120" r="4"/>
+    <circle cx="8" cy="64" r="4"/>
+  </g>
+  <g fill="none" stroke="#8db0a1" stroke-width="2" opacity="0.9">
+    <path d="M35 54q13-7 29-7m29 7q-13-7-29-7M25 74q16-8 39-8m39 8q-16-8-39-8"/>
+  </g>
+</svg>

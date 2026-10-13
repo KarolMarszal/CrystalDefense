@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="BossData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://enemies/BossData.gd" id="1_boss"]
+[ext_resource type="Resource" path="res://enemies/Kobold.tres" id="2_visual"]
+
+[resource]
+script = ExtResource("1_boss")
+boss_id = &"kobold_chief"
+display_name = "Kobold Chief"
+visual_source = ExtResource("2_visual")
+summon_enemy_data = ExtResource("2_visual")
+base_hp = 700
+base_speed = 155.0
+hp_growth_per_wave = 0.09
+speed_growth_per_wave = 0.008
+trophy_capacity = 2
+base_gold_reward = 90
+base_essence_reward = 18
+ability = 1
+ability_radius = 200.0
+ability_interval = 8.0
+ability_duration = 3.0
+ability_multiplier = 1.2
+secondary_multiplier = 1.25
+enrage_multiplier = 1.25
+summon_spawn_radius = 80.0

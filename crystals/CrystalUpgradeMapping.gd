@@ -13,14 +13,24 @@ enum Operation {
 @export var amount: float = 1.2
 
 
-func apply(configuration: AttackConfiguration, tower_upgrade_level: int) -> void:
+func apply(
+	configuration: AttackConfiguration,
+	tower_upgrade_level: int,
+	effectiveness_multiplier: float = 1.0
+) -> void:
 	if configuration == null or tower_upgrade_level <= 0:
 		return
 
 	var current_value := configuration.get_stat(affected_stat)
 	match operation:
 		Operation.ADDITIVE:
-			current_value += amount * tower_upgrade_level
+			current_value += amount * tower_upgrade_level * effectiveness_multiplier
 		Operation.MULTIPLICATIVE:
-			current_value *= pow(amount, tower_upgrade_level)
+			var improved_multiplier := (
+				1.0 + (amount - 1.0) * effectiveness_multiplier
+			)
+			current_value *= pow(
+				improved_multiplier,
+				tower_upgrade_level
+			)
 	configuration.set_stat(affected_stat, current_value)

@@ -38,6 +38,6 @@ attack_speed = 1.0
 attack_range = 180.0
 attack_behavior = 2
 crystal_level_growth = 1.1
-bleed_max_hp_fraction_per_second = 0.05
+bleed_max_hp_fraction_per_second = 0.02
 bleed_duration = 10.0
 tower_upgrade_mappings = Array[ExtResource("2_mapping")]([SubResource("Upgrade1DirectDamage"), SubResource("Upgrade2BleedDamage"), SubResource("Upgrade3BleedDuration")])

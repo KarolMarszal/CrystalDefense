@@ -52,6 +52,29 @@ theme_override_font_sizes/font_size = 28
 text = "CRYSTAL INVENTORY"
 horizontal_alignment = 1
 
+[node name="CrystalShop" type="HBoxContainer" parent="CenterPanel/MarginContainer/Contents"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="EssenceBalance" type="Label" parent="CenterPanel/MarginContainer/Contents/CrystalShop"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 18
+text = "Essence: 0"
+vertical_alignment = 1
+
+[node name="BuyCrystalButton" type="Button" parent="CenterPanel/MarginContainer/Contents/CrystalShop"]
+custom_minimum_size = Vector2(280, 48)
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "BUY CRYSTAL - 1 ESSENCE"
+
+[node name="ShopStatus" type="Label" parent="CenterPanel/MarginContainer/Contents"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = ""
+horizontal_alignment = 1
+
 [node name="EmptyLabel" type="Label" parent="CenterPanel/MarginContainer/Contents"]
 layout_mode = 2
 size_flags_vertical = 3

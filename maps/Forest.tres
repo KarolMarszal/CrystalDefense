@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="MapData" load_steps=13 format=3]
+[gd_resource type="Resource" script_class="MapData" load_steps=15 format=3]
 
 [ext_resource type="Script" path="res://maps/MapData.gd" id="1_map_data"]
 [ext_resource type="Script" path="res://maps/MapEnemyEntry.gd" id="2_map_enemy_entry"]
@@ -7,6 +7,7 @@
 [ext_resource type="Resource" path="res://enemies/Skeleton.tres" id="5_skeleton"]
 [ext_resource type="Resource" path="res://enemies/Orc.tres" id="6_orc"]
 [ext_resource type="Resource" path="res://enemies/Troll.tres" id="7_troll"]
+[ext_resource type="Resource" path="res://enemies/Spider.tres" id="8_spider"]
 
 [sub_resource type="Resource" id="GoblinEntry"]
 script = ExtResource("2_map_enemy_entry")
@@ -33,8 +34,13 @@ script = ExtResource("2_map_enemy_entry")
 enemy_data = ExtResource("7_troll")
 weight_multiplier = 0.6
 
+[sub_resource type="Resource" id="SpiderEntry"]
+script = ExtResource("2_map_enemy_entry")
+enemy_data = ExtResource("8_spider")
+weight_multiplier = 0.5
+
 [resource]
 script = ExtResource("1_map_data")
 map_id = &"forest"
 display_name = "Forest"
-enemy_entries = Array[ExtResource("2_map_enemy_entry")]([SubResource("GoblinEntry"), SubResource("KoboldEntry"), SubResource("SkeletonEntry"), SubResource("OrcEntry"), SubResource("TrollEntry")])
+enemy_entries = Array[ExtResource("2_map_enemy_entry")]([SubResource("GoblinEntry"), SubResource("KoboldEntry"), SubResource("SkeletonEntry"), SubResource("OrcEntry"), SubResource("TrollEntry"), SubResource("SpiderEntry")])

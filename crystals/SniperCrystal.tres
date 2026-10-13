@@ -1,0 +1,41 @@
+[gd_resource type="Resource" script_class="CrystalData" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://crystals/CrystalData.gd" id="1_data"]
+[ext_resource type="Script" path="res://crystals/CrystalUpgradeMapping.gd" id="2_mapping"]
+[ext_resource type="Texture2D" path="res://crystals/visuals/sniper.svg" id="3_visual"]
+
+[sub_resource type="Resource" id="Upgrade1Damage"]
+script = ExtResource("2_mapping")
+tower_upgrade_slot = 0
+display_name = "Damage"
+affected_stat = 0
+operation = 1
+amount = 1.2
+
+[sub_resource type="Resource" id="Upgrade2AttackSpeed"]
+script = ExtResource("2_mapping")
+tower_upgrade_slot = 1
+display_name = "Attack Speed"
+affected_stat = 1
+operation = 1
+amount = 1.2
+
+[sub_resource type="Resource" id="Upgrade3Range"]
+script = ExtResource("2_mapping")
+tower_upgrade_slot = 2
+display_name = "Range"
+affected_stat = 2
+operation = 1
+amount = 1.2
+
+[resource]
+script = ExtResource("1_data")
+crystal_id = &"sniper"
+display_name = "Sniper Crystal"
+visual_texture = ExtResource("3_visual")
+damage = 150.0
+attack_speed = 0.33
+attack_range = 350.0
+attack_behavior = 0
+crystal_level_growth = 1.1
+tower_upgrade_mappings = Array[ExtResource("2_mapping")]([SubResource("Upgrade1Damage"), SubResource("Upgrade2AttackSpeed"), SubResource("Upgrade3Range")])

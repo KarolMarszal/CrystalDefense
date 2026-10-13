@@ -10,6 +10,7 @@ display_name = "Skeleton"
 base_hp = 150
 base_speed = 85.0
 gold_reward = 14
+essence_points = 3
 visual_texture = ExtResource("2_visual")
 visual_scale = 0.29
 difficulty_cost = 2

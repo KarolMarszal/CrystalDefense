@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="BossData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://enemies/BossData.gd" id="1_boss"]
+[ext_resource type="Resource" path="res://enemies/Goblin.tres" id="2_visual"]
+
+[resource]
+script = ExtResource("1_boss")
+boss_id = &"goblin_chief"
+display_name = "Goblin Chief"
+visual_source = ExtResource("2_visual")
+base_hp = 1200
+base_speed = 90.0
+hp_growth_per_wave = 0.12
+speed_growth_per_wave = 0.003
+trophy_capacity = 2
+base_gold_reward = 100
+base_essence_reward = 20
+ability = 0
+summon_enemy_data = ExtResource("2_visual")
+summon_count = 3
+ability_radius = 260.0
+ability_interval = 5.0
+ability_multiplier = 1.15
+enrage_multiplier = 1.3

@@ -38,5 +38,5 @@ attack_speed = 0.0
 attack_range = 90.0
 attack_behavior = 1
 crystal_level_growth = 1.1
-slow_fraction = 0.5
+slow_fraction = 0.2
 tower_upgrade_mappings = Array[ExtResource("2_mapping")]([SubResource("Upgrade1SlowAmount"), SubResource("Upgrade2SlowRange"), SubResource("Upgrade3SlowDuration")])

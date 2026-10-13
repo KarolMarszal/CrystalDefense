@@ -4,8 +4,8 @@ extends Area2D
 signal tower_built
 
 const TOWER_SCENE: PackedScene = preload("res://towers/Tower.tscn")
+const CONSTRUCTION_PRICE: int = 100
 
-@export var price: int = 0
 @export var slot_size: Vector2 = Vector2(50.0, 50.0)
 @export var available_for_building: bool = true:
 	set(value):
@@ -21,6 +21,10 @@ var _purchase_in_progress: bool = false
 var occupied: bool:
 	get:
 		return is_instance_valid(built_tower)
+
+var price: int:
+	get:
+		return CONSTRUCTION_PRICE
 
 
 func _ready() -> void:
@@ -63,9 +67,9 @@ func attempt_build() -> bool:
 		_update_input_pickable()
 		return false
 
-	var game_scene := get_tree().current_scene
+	var game_scene := get_parent()
 	if game_scene == null:
-		push_error("BuildSlot cannot build without an active scene.")
+		push_error("BuildSlot cannot build without a parent scene.")
 		tower.free()
 		_purchase_in_progress = false
 		_update_input_pickable()

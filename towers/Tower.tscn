@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://c7ichretyq38n" path="res://towers/tower.gd" id="1_arn3v"]
 [ext_resource type="Texture2D" path="res://towers/visuals/tower.svg" id="2_tower_visual"]
+[ext_resource type="Script" path="res://towers/CrystalSocketVisual.gd" id="3_socket_visual"]
 
 [node name="Tower" type="Area2D" unique_id=432132845]
 script = ExtResource("1_arn3v")
@@ -16,3 +17,7 @@ scale = Vector2(0.42, 0.42)
 visible = false
 position = Vector2(0, -14)
 scale = Vector2(0.2, 0.2)
+
+[node name="CrystalSocketVisual" type="Node2D" parent="."]
+position = Vector2(0, -14)
+script = ExtResource("3_socket_visual")

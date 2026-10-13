@@ -10,6 +10,7 @@ display_name = "Orc"
 base_hp = 300
 base_speed = 60.0
 gold_reward = 20
+essence_points = 2
 visual_texture = ExtResource("2_visual")
 visual_scale = 0.37
 difficulty_cost = 4

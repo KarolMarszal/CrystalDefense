@@ -10,6 +10,7 @@ display_name = "Kobold"
 base_hp = 50
 base_speed = 150.0
 gold_reward = 6
+essence_points = 1
 visual_texture = ExtResource("2_visual")
 visual_scale = 0.24
 difficulty_cost = 1

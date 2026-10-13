@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="EnemyData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://enemies/EnemyData.gd" id="1_enemy_data"]
+[ext_resource type="Texture2D" path="res://enemies/visuals/spider.svg" id="2_visual"]
+
+[resource]
+script = ExtResource("1_enemy_data")
+enemy_id = &"spider"
+display_name = "Spider"
+base_hp = 100
+base_speed = 100.0
+gold_reward = 10
+essence_points = 1
+visual_texture = ExtResource("2_visual")
+visual_scale = 0.18
+difficulty_cost = 2
+unlock_wave = 11
+selection_weight = 0.8
+can_carry_trophy = false
+can_pickup_dropped_trophy = false

@@ -6,6 +6,7 @@ extends Resource
 @export var base_hp: int = 1
 @export var base_speed: float = 1.0
 @export var gold_reward: int = 0
+@export_range(0, 1000, 1) var essence_points: int = 0
 @export var visual_texture: Texture2D
 @export_range(0.1, 1.0, 0.01) var visual_scale: float = 0.32
 @export_range(1, 100, 1) var difficulty_cost: int = 1

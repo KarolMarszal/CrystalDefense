@@ -19,6 +19,8 @@ var slow_fraction: float = 0.0
 var slow_duration: float = 0.0
 var bleed_max_hp_fraction_per_second: float = 0.0
 var bleed_duration: float = 0.0
+var area_damage_fraction: float = 0.0
+var area_damage_radius: float = 0.0
 
 
 func get_stat(stat: Stat) -> float:

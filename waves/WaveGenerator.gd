@@ -3,9 +3,6 @@ extends Node
 
 @export var enemy_catalog: Array[EnemyData] = []
 @export var archetypes: Array[WaveArchetype] = []
-@export var opening_wave_groups: Array[WaveEnemyGroup] = []
-@export var opening_wave_enemy: EnemyData
-@export_range(1, 1000, 1) var opening_wave_quantity: int = 5
 @export_range(1, 100000, 1) var base_budget: int = 10
 @export_range(0, 1000, 1) var budget_growth: int = 4
 @export_range(1, 10000, 1) var maximum_generation_attempts: int = 1000
@@ -36,28 +33,6 @@ func generate_wave(
 	var config := WaveConfig.new()
 	config.wave_number = wave_number
 
-	if wave_number <= 1:
-		if not opening_wave_groups.is_empty():
-			config.groups.append_array(opening_wave_groups)
-		elif opening_wave_enemy != null:
-			var opening_group := WaveEnemyGroup.new()
-			opening_group.enemy_data = opening_wave_enemy
-			opening_group.quantity = opening_wave_quantity
-			config.groups.append(opening_group)
-		else:
-			push_error("WaveGenerator requires groups or EnemyData for the opening wave.")
-			return config
-		config.archetype_id = &"MANUAL"
-		if log_generation:
-			_print_generation_summary(
-				config,
-				get_difficulty_budget(wave_number),
-				"MANUAL",
-				{},
-				map_data
-			)
-		return config
-
 	var budget := get_difficulty_budget(wave_number)
 	var remaining_budget := budget
 	var rng := RandomNumberGenerator.new()
@@ -77,7 +52,8 @@ func generate_wave(
 		var eligible_enemies := _get_eligible_enemies(
 			wave_number,
 			remaining_budget,
-			map_data
+			map_data,
+			config
 		)
 		if eligible_enemies.is_empty():
 			break
@@ -96,18 +72,43 @@ func generate_wave(
 		_add_enemy_to_group(config, selected_enemy)
 		remaining_budget -= selected_enemy.difficulty_cost
 
-	if log_generation:
-		_print_generation_summary(
-			config,
-			budget,
-			archetype.display_name,
-			enemy_repetition_modifiers,
-			map_data
-		)
-
 	if commit_to_history:
 		_record_wave(config)
 
+	return config
+
+
+func generate_matching_enemy_wave(
+	wave_number: int,
+	enemy_data: EnemyData,
+	archetype_id: StringName
+) -> WaveConfig:
+	var config := WaveConfig.new()
+	config.wave_number = wave_number
+	config.archetype_id = archetype_id
+	if enemy_data == null:
+		return config
+	if enemy_data.difficulty_cost <= 0:
+		push_error(
+			"Cannot generate a matching-enemy wave with a non-positive cost: %s"
+			% enemy_data.resource_path
+		)
+		return config
+
+	var remaining_budget := get_difficulty_budget(wave_number)
+	var attempts := 0
+	while (
+		remaining_budget >= enemy_data.difficulty_cost
+		and attempts < maximum_generation_attempts
+	):
+		_add_enemy_to_group(config, enemy_data)
+		remaining_budget -= enemy_data.difficulty_cost
+		attempts += 1
+	if attempts >= maximum_generation_attempts and remaining_budget >= enemy_data.difficulty_cost:
+		push_warning(
+			"Matching-enemy wave generation reached its attempt limit on wave %d."
+			% wave_number
+		)
 	return config
 
 
@@ -159,7 +160,8 @@ func _get_archetype_repetition_modifier(archetype: WaveArchetype) -> float:
 func _get_eligible_enemies(
 	wave_number: int,
 	remaining_budget: int,
-	map_data: MapData
+	map_data: MapData,
+	config: WaveConfig
 ) -> Array[EnemyData]:
 	var eligible_enemies: Array[EnemyData] = []
 	var candidates: Array[EnemyData] = []
@@ -191,7 +193,55 @@ func _get_eligible_enemies(
 			continue
 		eligible_enemies.append(enemy_data)
 
+	if not _has_non_spider_group(config):
+		var has_affordable_non_spider := false
+		var spider_cost := 0
+		for enemy_data in eligible_enemies:
+			if enemy_data.enemy_id == &"spider":
+				spider_cost = enemy_data.difficulty_cost
+				continue
+			if (
+				not _has_enemy_type(config, enemy_data)
+				and enemy_data.difficulty_cost <= remaining_budget
+			):
+				has_affordable_non_spider = true
+		if config.groups.size() > 0 or not has_affordable_non_spider:
+			eligible_enemies = _without_spider_candidates(eligible_enemies)
+		elif spider_cost > 0:
+			var can_add_spider_and_another_type := false
+			for enemy_data in eligible_enemies:
+				if (
+					enemy_data.enemy_id != &"spider"
+					and enemy_data.difficulty_cost
+						<= remaining_budget - spider_cost
+				):
+					can_add_spider_and_another_type = true
+					break
+			if not can_add_spider_and_another_type:
+				eligible_enemies = _without_spider_candidates(eligible_enemies)
+
 	return eligible_enemies
+
+
+func _without_spider_candidates(
+	candidates: Array[EnemyData]
+) -> Array[EnemyData]:
+	var filtered: Array[EnemyData] = []
+	for enemy_data in candidates:
+		if enemy_data.enemy_id != &"spider":
+			filtered.append(enemy_data)
+	return filtered
+
+
+func _has_non_spider_group(config: WaveConfig) -> bool:
+	for group in config.groups:
+		if (
+			group.enemy_data != null
+			and group.enemy_data.enemy_id != &"spider"
+			and group.quantity > 0
+		):
+			return true
+	return false
 
 
 func _select_weighted_enemy(
@@ -382,58 +432,3 @@ func _record_wave(config: WaveConfig) -> void:
 	})
 	while recent_wave_history.size() > recent_wave_history_size:
 		recent_wave_history.pop_back()
-
-
-func _print_generation_summary(
-	config: WaveConfig,
-	budget: int,
-	archetype_name: String,
-	enemy_repetition_modifiers: Dictionary,
-	map_data: MapData
-) -> void:
-	var generated_cost := 0
-	var composition := PackedStringArray()
-	for group in config.groups:
-		generated_cost += group.enemy_data.difficulty_cost * group.quantity
-		composition.append("%s x%d" % [group.enemy_data.display_name, group.quantity])
-
-	var recent_archetypes := PackedStringArray()
-	for history_entry in recent_wave_history:
-		recent_archetypes.append(String(history_entry["archetype_id"]))
-
-	var repetition_summaries := PackedStringArray()
-	var debug_enemy_catalog: Array[EnemyData] = []
-	if map_data != null:
-		for entry in map_data.enemy_entries:
-			if (
-				entry != null
-				and entry.enemy_data != null
-				and not debug_enemy_catalog.has(entry.enemy_data)
-			):
-				debug_enemy_catalog.append(entry.enemy_data)
-	else:
-		debug_enemy_catalog.append_array(enemy_catalog)
-
-	for enemy_data in debug_enemy_catalog:
-		if enemy_data == null or not enemy_repetition_modifiers.has(enemy_data.enemy_id):
-			continue
-		repetition_summaries.append(
-			"%s: %.2f"
-			% [
-				enemy_data.display_name,
-				enemy_repetition_modifiers[enemy_data.enemy_id]
-			]
-		)
-
-	print(
-		"Wave %d | Archetype: %s | Budget: %d | Generated cost: %d\n%s\nRecent archetypes: %s\nEnemy repetition modifiers: %s"
-		% [
-			config.wave_number,
-			archetype_name,
-			budget,
-			generated_cost,
-			"\n".join(composition),
-			", ".join(recent_archetypes),
-			", ".join(repetition_summaries)
-		]
-	)

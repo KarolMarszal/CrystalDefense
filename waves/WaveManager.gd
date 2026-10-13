@@ -16,16 +16,19 @@ signal countdown_changed(message: String)
 signal auto_waves_changed(enabled: bool)
 
 enum StartReason {
-	INITIAL,
 	MANUAL,
 	AUTOMATIC
 }
 
 const ENEMY_SCENE: PackedScene = preload("res://enemies/Enemy.tscn")
+const BOSS_SCENE: PackedScene = preload("res://enemies/BossEnemy.tscn")
+const SPIDER_WEB_SCENE: PackedScene = preload("res://enemies/SpiderWebTrap.tscn")
+const BOSS_WAVE_SCHEDULE = preload("res://waves/BossWaveSchedule.gd")
 const BASE_ENEMY_COUNT: int = 5
 const ENEMIES_PER_WAVE: int = 2
-const ENEMY_HP_GROWTH_FACTOR: float = 1.2
-const ENEMY_SPEED_INCREASE_PER_WAVE: float = 0.008
+const ENEMY_HP_GROWTH_FACTOR: float = 1.1
+const ENEMY_SPEED_INCREASE_PER_WAVE: float = 0.005
+const AUTO_WAVE_DELAY_SECONDS: float = 10.0
 
 @export var spawn_interval: float = 0.8
 @export var default_enemy_data: EnemyData
@@ -44,15 +47,14 @@ var waves_by_number: Dictionary = {}
 var auto_waves_enabled: bool = true
 var _spawning_stopped: bool = false
 var _started_wave_numbers: Dictionary = {}
-var _initial_countdown_timer: Timer
-var _initial_countdown_remaining: int = 0
-var _initial_countdown_started: bool = false
-var _initial_countdown_token: int = 0
 var _automatic_start_timers: Dictionary = {}
 var _automatic_start_tokens: Dictionary = {}
+var _automatic_start_remaining: Dictionary = {}
 var _next_automatic_start_token: int = 0
 var _automatic_schedule_generation: int = 0
-var _run_generation: int = 0
+var _boss_selection_rng := RandomNumberGenerator.new()
+var _summon_placement_rng := RandomNumberGenerator.new()
+var _boss_selection_pools: Dictionary = {}
 
 @onready var _enemies_container: Node2D = get_node(enemies_container_path)
 @onready var _enemy_path: Path2D = get_node(enemy_path_node_path)
@@ -60,10 +62,7 @@ var _run_generation: int = 0
 
 
 func begin_run() -> void:
-	_run_generation += 1
-	_cancel_initial_countdown()
 	_cancel_automatic_start_timers()
-	_initial_countdown_started = false
 	_spawning_stopped = false
 	set_process(true)
 	next_wave_number = 1
@@ -71,10 +70,10 @@ func begin_run() -> void:
 	completed_wave_numbers.clear()
 	waves_by_number.clear()
 	_started_wave_numbers.clear()
+	_boss_selection_pools.clear()
+	_boss_selection_rng.seed = hash("%d:tier-1-boss-selection" % run_seed)
 	auto_waves_enabled = true
 	auto_waves_changed.emit(auto_waves_enabled)
-	if auto_waves_enabled:
-		_start_initial_countdown()
 
 
 func start_wave(reason: StartReason) -> void:
@@ -87,21 +86,47 @@ func start_wave(reason: StartReason) -> void:
 	var wave_number := next_wave_number
 	if _started_wave_numbers.has(wave_number):
 		return
-	if reason == StartReason.INITIAL and wave_number != 1:
-		return
 
-	_cancel_initial_countdown()
 	_cancel_automatic_start_for_wave(wave_number)
 	_started_wave_numbers[wave_number] = true
 
 	var wave := ActiveWave.new()
 	wave.wave_number = wave_number
-	wave.config = create_wave_config(wave.wave_number, true, true)
-	var archetype_name := String(wave.config.archetype_id)
-	if archetype_name.is_empty():
-		archetype_name = "MANUAL" if reason == StartReason.MANUAL else "AUTO"
-	print("Starting Wave %d | Archetype: %s" % [wave.wave_number, archetype_name])
-	wave.total_enemies = _get_total_enemy_count(wave.config)
+	var test_boss := BOSS_WAVE_SCHEDULE.get_test_wave_boss(wave_number)
+	var test_enemy_data := BOSS_WAVE_SCHEDULE.get_test_wave_enemy_data(
+		wave_number
+	)
+	if test_boss != null:
+		wave.config = _create_tier_one_boss_wave_config(
+			wave.wave_number,
+			test_boss,
+			&"BOSS_TEST"
+		)
+		wave.boss_definitions.append(test_boss)
+	elif test_enemy_data != null:
+		wave.config = _create_matching_enemy_wave_config(
+			wave.wave_number,
+			test_enemy_data,
+			&"SPIDER_TEST"
+		)
+	else:
+		wave.config = create_wave_config(wave.wave_number, false, true)
+		wave.boss_definitions = _select_bosses_for_wave(wave_number)
+	if (
+		test_boss == null
+		and int(get_boss_wave_requirements(wave_number).get("tier", 0)) == 1
+		and not wave.boss_definitions.is_empty()
+	):
+		wave.config = _create_tier_one_boss_wave_config(
+			wave.wave_number,
+			wave.boss_definitions[0],
+			wave.config.archetype_id
+		)
+
+	wave.total_enemies = (
+		_get_total_enemy_count(wave.config)
+		+ wave.boss_definitions.size()
+	)
 	wave.start_reason = reason
 	wave.gold_multiplier = (
 		_get_gold_multiplier_for_wave(wave.wave_number)
@@ -117,7 +142,63 @@ func start_wave(reason: StartReason) -> void:
 	next_wave_changed.emit(next_wave_number)
 	active_waves_changed.emit()
 
+	_spawn_scheduled_bosses(wave)
 	_spawn_next_enemy(wave)
+
+
+func _enter_tree() -> void:
+	_summon_placement_rng.randomize()
+
+
+func _create_tier_one_boss_wave_config(
+	wave_number: int,
+	boss_data: BossData,
+	archetype_id: StringName
+) -> WaveConfig:
+	var regular_enemy_data := BOSS_WAVE_SCHEDULE.get_regular_enemy_data(
+		boss_data
+	)
+	if _wave_generator != null:
+		return _wave_generator.generate_matching_enemy_wave(
+			wave_number,
+			regular_enemy_data,
+			archetype_id
+		)
+
+	var config := WaveConfig.new()
+	config.wave_number = wave_number
+	config.archetype_id = archetype_id
+	if regular_enemy_data == null:
+		return config
+	var group := WaveEnemyGroup.new()
+	group.enemy_data = regular_enemy_data
+	group.quantity = BASE_ENEMY_COUNT + (wave_number - 1) * ENEMIES_PER_WAVE
+	config.groups.append(group)
+	return config
+
+
+func _create_matching_enemy_wave_config(
+	wave_number: int,
+	enemy_data: EnemyData,
+	archetype_id: StringName
+) -> WaveConfig:
+	if _wave_generator != null:
+		return _wave_generator.generate_matching_enemy_wave(
+			wave_number,
+			enemy_data,
+			archetype_id
+		)
+
+	var config := WaveConfig.new()
+	config.wave_number = wave_number
+	config.archetype_id = archetype_id
+	if enemy_data == null:
+		return config
+	var group := WaveEnemyGroup.new()
+	group.enemy_data = enemy_data
+	group.quantity = BASE_ENEMY_COUNT + (wave_number - 1) * ENEMIES_PER_WAVE
+	config.groups.append(group)
+	return config
 
 
 func _process(delta: float) -> void:
@@ -137,7 +218,6 @@ func _process(delta: float) -> void:
 func stop_spawning() -> void:
 	_spawning_stopped = true
 	set_process(false)
-	_cancel_initial_countdown()
 	_cancel_automatic_start_timers()
 
 
@@ -147,91 +227,10 @@ func set_auto_waves_enabled(enabled: bool) -> void:
 
 	auto_waves_enabled = enabled
 	if not auto_waves_enabled:
-		_pause_initial_countdown()
 		_cancel_automatic_start_timers()
-	else:
-		if next_wave_number == 1 and not _started_wave_numbers.has(1):
-			_start_initial_countdown()
-		else:
-			_schedule_next_eligible_wave()
+	elif next_wave_number > 1:
+		_schedule_next_eligible_wave()
 	auto_waves_changed.emit(auto_waves_enabled)
-
-
-func _start_initial_countdown() -> void:
-	if (
-		_spawning_stopped
-		or not auto_waves_enabled
-		or next_wave_number != 1
-		or _started_wave_numbers.has(1)
-		or is_instance_valid(_initial_countdown_timer)
-	):
-		return
-
-	_initial_countdown_token += 1
-	if not _initial_countdown_started:
-		_initial_countdown_remaining = 3
-		_initial_countdown_started = true
-	_initial_countdown_timer = Timer.new()
-	_initial_countdown_timer.one_shot = true
-	_initial_countdown_timer.wait_time = 1.0
-	_initial_countdown_timer.timeout.connect(
-		_on_initial_countdown_timeout.bind(
-			_run_generation,
-			_initial_countdown_token,
-			_initial_countdown_timer
-		)
-	)
-	add_child(_initial_countdown_timer)
-	countdown_changed.emit(
-		"First wave in: %d" % _initial_countdown_remaining
-	)
-	_initial_countdown_timer.start()
-
-
-func _on_initial_countdown_timeout(
-	generation: int,
-	token: int,
-	timer: Timer
-) -> void:
-	if (
-		generation != _run_generation
-		or token != _initial_countdown_token
-		or timer != _initial_countdown_timer
-		or _spawning_stopped
-		or not auto_waves_enabled
-	):
-		return
-
-	if _initial_countdown_remaining > 1:
-		_initial_countdown_remaining -= 1
-		countdown_changed.emit(
-			"First wave in: %d" % _initial_countdown_remaining
-		)
-		timer.start()
-		return
-
-	_cancel_initial_countdown()
-	start_wave(StartReason.INITIAL)
-
-
-func _pause_initial_countdown() -> void:
-	_initial_countdown_token += 1
-	if is_instance_valid(_initial_countdown_timer):
-		_initial_countdown_timer.stop()
-		_initial_countdown_timer.queue_free()
-	_initial_countdown_timer = null
-	countdown_changed.emit("")
-
-
-func _cancel_initial_countdown() -> void:
-	_initial_countdown_token += 1
-	_initial_countdown_remaining = 0
-	_initial_countdown_started = false
-	if is_instance_valid(_initial_countdown_timer):
-		_initial_countdown_timer.stop()
-		_initial_countdown_timer.queue_free()
-	_initial_countdown_timer = null
-	countdown_changed.emit("")
 
 
 func _schedule_next_eligible_wave() -> void:
@@ -240,7 +239,7 @@ func _schedule_next_eligible_wave() -> void:
 		return
 
 	var source_wave: ActiveWave = waves_by_number[source_wave_number]
-	if source_wave.spawned_enemies < source_wave.total_enemies:
+	if source_wave.state != ActiveWave.State.COMPLETED:
 		return
 
 	_schedule_automatic_start(next_wave_number)
@@ -249,6 +248,7 @@ func _schedule_next_eligible_wave() -> void:
 func _schedule_automatic_start(wave_number: int) -> void:
 	if (
 		_spawning_stopped
+		or not is_inside_tree()
 		or not auto_waves_enabled
 		or wave_number != next_wave_number
 		or _started_wave_numbers.has(wave_number)
@@ -260,7 +260,8 @@ func _schedule_automatic_start(wave_number: int) -> void:
 	var token := _next_automatic_start_token
 	var timer := Timer.new()
 	timer.one_shot = true
-	timer.wait_time = 5.0
+	_automatic_start_remaining[wave_number] = int(AUTO_WAVE_DELAY_SECONDS)
+	timer.wait_time = 1.0
 	timer.timeout.connect(
 		_on_automatic_start_timeout.bind(
 			wave_number,
@@ -272,6 +273,9 @@ func _schedule_automatic_start(wave_number: int) -> void:
 	_automatic_start_timers[wave_number] = timer
 	_automatic_start_tokens[wave_number] = token
 	add_child(timer)
+	countdown_changed.emit(
+		"Next wave in: %d" % int(_automatic_start_remaining[wave_number])
+	)
 	timer.start()
 
 
@@ -289,9 +293,20 @@ func _on_automatic_start_timeout(
 	):
 		return
 
+	var remaining := int(_automatic_start_remaining.get(wave_number, 0))
+	if remaining > 1:
+		_automatic_start_remaining[wave_number] = remaining - 1
+		countdown_changed.emit(
+			"Next wave in: %d" % int(_automatic_start_remaining[wave_number])
+		)
+		timer.start(1.0)
+		return
+
 	_automatic_start_timers.erase(wave_number)
 	_automatic_start_tokens.erase(wave_number)
+	_automatic_start_remaining.erase(wave_number)
 	timer.queue_free()
+	countdown_changed.emit("")
 	if (
 		_spawning_stopped
 		or not auto_waves_enabled
@@ -303,6 +318,10 @@ func _on_automatic_start_timeout(
 	start_wave(StartReason.AUTOMATIC)
 
 
+func get_boss_wave_requirements(wave_number: int) -> Dictionary:
+	return BOSS_WAVE_SCHEDULE.get_requirements(wave_number)
+
+
 func _cancel_automatic_start_for_wave(wave_number: int) -> void:
 	if not _automatic_start_timers.has(wave_number):
 		return
@@ -310,8 +329,10 @@ func _cancel_automatic_start_for_wave(wave_number: int) -> void:
 	var timer: Timer = _automatic_start_timers[wave_number]
 	_automatic_start_timers.erase(wave_number)
 	_automatic_start_tokens.erase(wave_number)
+	_automatic_start_remaining.erase(wave_number)
 	timer.stop()
 	timer.queue_free()
+	countdown_changed.emit("")
 
 
 func _cancel_automatic_start_timers() -> void:
@@ -322,6 +343,8 @@ func _cancel_automatic_start_timers() -> void:
 			timer.queue_free()
 	_automatic_start_timers.clear()
 	_automatic_start_tokens.clear()
+	_automatic_start_remaining.clear()
+	countdown_changed.emit("")
 
 
 func set_run_seed(value: int) -> void:
@@ -427,18 +450,31 @@ func get_active_wave_summaries() -> Array[Dictionary]:
 
 
 func _get_active_enemy_count_for_wave(wave: ActiveWave) -> int:
+	# Read-only: entries are removed only by _on_enemy_inactive so the
+	# completion check always runs for the death that removes the last enemy.
 	var active_count := 0
-	for enemy_id in wave.active_enemies.keys():
-		var enemy = wave.active_enemies[enemy_id]
+	for enemy in wave.active_enemies.values():
 		if (
 			is_instance_valid(enemy)
 			and not enemy.get("is_dead")
 			and not enemy.is_queued_for_deletion()
 		):
 			active_count += 1
-		else:
-			wave.active_enemies.erase(enemy_id)
 
+	return active_count
+
+
+func _get_active_planned_enemy_count_for_wave(wave: ActiveWave) -> int:
+	var active_count := 0
+	for enemy in wave.active_enemies.values():
+		if (
+			is_instance_valid(enemy)
+			and enemy.is_planned_wave_enemy
+			and not enemy.is_dead
+			and not enemy.get("_has_become_inactive")
+			and not enemy.is_queued_for_deletion()
+		):
+			active_count += 1
 	return active_count
 
 
@@ -450,15 +486,26 @@ func _get_gold_multiplier_for_wave(wave_number: int) -> float:
 	if previous_wave.total_enemies <= 0:
 		return 1.0
 
-	var active_previous_wave := _get_active_enemy_count_for_wave(previous_wave)
+	var active_previous_wave := _get_active_planned_enemy_count_for_wave(
+		previous_wave
+	)
 	var removed_previous_wave := previous_wave.spawned_enemies - active_previous_wave
 	var contributing_previous_wave := maxi(
 		previous_wave.total_enemies - removed_previous_wave,
 		0
 	)
-	return 1.0 + (
+	var base_bonus := (
 		float(contributing_previous_wave) / float(previous_wave.total_enemies)
 	) * 0.30
+	var improved_bonus := minf(
+		base_bonus * (
+			1.0 + CrystalInventory.get_skill_effect_value(
+				&"early_wave_bonus_scale"
+			)
+		),
+		0.30
+	)
+	return 1.0 + improved_bonus
 
 
 func _prune_old_wave_records(new_wave_number: int) -> void:
@@ -479,25 +526,381 @@ func _get_total_enemy_count(config: WaveConfig) -> int:
 	return total
 
 
+func _select_bosses_for_wave(wave_number: int) -> Array[BossData]:
+	var selected: Array[BossData] = []
+	var requirements := get_boss_wave_requirements(wave_number)
+	if requirements.is_empty():
+		return selected
+
+	var tier := int(requirements["tier"])
+	var requested_count := int(requirements["count"])
+	while selected.size() < requested_count:
+		var draw_pile: Array = _boss_selection_pools.get(tier, [])
+		if draw_pile.is_empty():
+			draw_pile = BOSS_WAVE_SCHEDULE.get_boss_pool(tier)
+			if draw_pile.is_empty():
+				push_warning(
+					"No boss definitions are configured for Tier %d; "
+					+ "wave %d will use its regular composition only."
+					% [tier, wave_number]
+				)
+				break
+			for index in range(draw_pile.size() - 1, 0, -1):
+				var swap_index := _boss_selection_rng.randi_range(0, index)
+				var swapped = draw_pile[index]
+				draw_pile[index] = draw_pile[swap_index]
+				draw_pile[swap_index] = swapped
+
+		selected.append(draw_pile.pop_back() as BossData)
+		_boss_selection_pools[tier] = draw_pile
+	return selected
+
+
+func _spawn_scheduled_bosses(wave: ActiveWave) -> void:
+	for boss_data in wave.boss_definitions:
+		var boss_instance := BOSS_SCENE.instantiate()
+		var boss := boss_instance as BossEnemy
+		if boss == null:
+			push_error("Boss scene must have a BossEnemy root.")
+			boss_instance.free()
+			wave.spawned_enemies += 1
+			continue
+
+		boss.initialize_for_boss(
+			boss_data,
+			wave.wave_number,
+			wave.gold_multiplier,
+			BOSS_WAVE_SCHEDULE.get_test_boss_hp_multiplier(
+				boss_data,
+				wave.wave_number
+			)
+		)
+		boss.castle = get_node_or_null(castle_node_path) as Castle
+		boss.camp = get_node_or_null(enemy_camp_node_path) as EnemyCamp
+		boss.path = _enemy_path.curve
+		boss.position = _enemy_path.curve.get_point_position(0)
+		boss.summons_requested.connect(_on_boss_summons_requested)
+		_register_wave_enemy(wave, boss)
+		_enemies_container.add_child(boss)
+		wave.spawned_enemies += 1
+		_emit_wave_progress(wave)
+
+
+func _on_boss_summons_requested(
+	enemy_data: EnemyData,
+	quantity: int,
+	boss: BossEnemy
+) -> void:
+	if not is_instance_valid(boss) or boss.is_dead:
+		return
+	if (
+		enemy_data == null
+		or quantity <= 0
+	):
+		if not _is_spider_summon_request(enemy_data, boss):
+			boss._log_ability(
+				"summon",
+				"summon_rejected",
+				"reason=invalid_enemy_data_or_quantity count=%d" % quantity
+			)
+		return
+	if not waves_by_number.has(boss.wave_number):
+		if not _is_spider_summon_request(enemy_data, boss):
+			boss._log_ability(
+				"summon",
+				"summon_rejected",
+				"reason=wave_not_registered wave=%d" % boss.wave_number
+			)
+		return
+	var wave: ActiveWave = waves_by_number[boss.wave_number]
+	if wave.state == ActiveWave.State.COMPLETED:
+		if not _is_spider_summon_request(enemy_data, boss):
+			boss._log_ability(
+				"summon",
+				"summon_rejected",
+				"reason=wave_already_completed"
+			)
+		return
+
+	var summoned: Array[Enemy] = []
+	var placement_failures := 0
+	for _index in range(quantity):
+		var enemy_instance := ENEMY_SCENE.instantiate()
+		var enemy := enemy_instance as Enemy
+		if enemy == null:
+			if not _is_spider_summon_request(enemy_data, boss):
+				push_error("Summoned enemy scene must have an Enemy root.")
+			enemy_instance.free()
+			continue
+
+		enemy.initialize_for_wave(
+			enemy_data,
+			get_enemy_hp_for_wave(wave.wave_number, enemy_data.base_hp),
+			get_enemy_speed_for_wave(wave.wave_number, enemy_data.base_speed),
+			wave.wave_number,
+			wave.gold_multiplier,
+			false
+		)
+		enemy.castle = get_node_or_null(castle_node_path) as Castle
+		enemy.camp = get_node_or_null(enemy_camp_node_path) as EnemyCamp
+		enemy.path = _enemy_path.curve
+		enemy.path_distance = boss.path_distance
+		var spawn_position: Vector2
+		if boss.boss_data.ability == BossData.Ability.GOBLIN_CHIEF:
+			enemy.path_distance = 0.0
+			spawn_position = _enemy_path.to_global(
+				_enemy_path.curve.sample_baked(0.0)
+			)
+		elif boss.boss_data.ability == BossData.Ability.KOBOLD_CHIEF:
+			var placed_position: Variant = _find_kobold_summon_position(
+				boss,
+				summoned
+			)
+			if placed_position == null:
+				enemy_instance.free()
+				placement_failures += 1
+				continue
+			spawn_position = placed_position
+		elif enemy_data.enemy_id == &"spider_summon":
+			var placement: Variant = _find_spider_summon_position(
+				boss,
+				summoned
+			)
+			if placement == null:
+				enemy_instance.free()
+				placement_failures += 1
+				continue
+			enemy.path_distance = float(placement["path_distance"])
+			spawn_position = placement["position"]
+		else:
+			spawn_position = _enemy_path.to_global(
+				_enemy_path.curve.sample_baked(enemy.path_distance)
+			)
+		enemy.global_position = spawn_position
+		if enemy_data.enemy_id == &"spider_summon":
+			enemy.apply_continuous_self_damage(0.05)
+			if (
+				boss.movement_direction
+				== Enemy.MovementDirection.RETURNING_TO_CAMP
+			):
+				enemy.start_return_to_camp()
+		_register_wave_enemy(wave, enemy)
+		_enemies_container.add_child(enemy)
+		summoned.append(enemy)
+
+	if is_instance_valid(boss):
+		if summoned.is_empty():
+			if not _is_spider_summon_request(enemy_data, boss):
+				boss._log_ability(
+					"summon",
+					"summon_failed",
+					"reason=all_spawns_failed requested=%d placement_failures=%d"
+					% [quantity, placement_failures]
+				)
+		else:
+			boss.track_summoned_enemies(summoned)
+			if (
+				boss.boss_data.ability == BossData.Ability.SPIDER_MATRON
+				and boss.claim_spider_web_for_summon()
+			):
+				var web_instance := SPIDER_WEB_SCENE.instantiate()
+				var web_trap := web_instance as SpiderWebTrap
+				if web_trap == null:
+					push_error("Spider web scene must have a SpiderWebTrap root.")
+					web_instance.free()
+				else:
+					_enemies_container.add_child(web_trap)
+					web_trap.global_position = boss.global_position
+			if boss.boss_data.ability == BossData.Ability.KOBOLD_CHIEF:
+				var spawned_positions := PackedStringArray()
+				for enemy in summoned:
+					spawned_positions.append(
+						"(%.1f,%.1f)" % [
+							enemy.global_position.x,
+							enemy.global_position.y
+						]
+					)
+				boss._log_ability(
+					"kobold_summon",
+					"spawn_position_result",
+					"requested=%d spawned=%d positions=%s"
+					% [quantity, summoned.size(), ", ".join(spawned_positions)]
+				)
+
+
+func _is_spider_summon_request(
+	enemy_data: EnemyData,
+	boss: BossEnemy
+) -> bool:
+	return (
+		is_instance_valid(boss)
+		and boss.boss_data != null
+		and boss.boss_data.ability == BossData.Ability.SPIDER_MATRON
+		and enemy_data != null
+		and enemy_data.enemy_id == &"spider_summon"
+	)
+
+
+func _find_kobold_summon_position(
+	boss: BossEnemy,
+	already_placed: Array[Enemy]
+) -> Variant:
+	if boss.boss_data.summon_spawn_radius <= 0.0:
+		boss._log_ability(
+			"kobold_summon",
+			"placement_failed",
+			"reason=spawn_radius_not_configured"
+		)
+		return null
+
+	for _attempt in range(20):
+		var angle := _summon_placement_rng.randf_range(0.0, TAU)
+		var distance := _summon_placement_rng.randf_range(
+			minf(30.0, boss.boss_data.summon_spawn_radius),
+			boss.boss_data.summon_spawn_radius
+		)
+		var candidate := boss.global_position + Vector2.from_angle(angle) * distance
+		if _is_summon_position_clear(candidate, boss, already_placed, 28.0):
+			return candidate
+
+	boss._log_ability(
+		"kobold_summon",
+		"placement_failed",
+		"reason=no_unoccupied_position attempts=20"
+	)
+	return null
+
+
+func _find_spider_summon_position(
+	boss: BossEnemy,
+	already_placed: Array[Enemy]
+) -> Variant:
+	if (
+		boss.boss_data.summon_spawn_radius <= 0.0
+		or _enemy_path.curve == null
+	):
+		return null
+
+	var path_length := _enemy_path.curve.get_baked_length()
+	var minimum_distance := maxf(
+		boss.path_distance - boss.boss_data.summon_spawn_radius,
+		0.0
+	)
+	var maximum_distance := minf(
+		boss.path_distance + boss.boss_data.summon_spawn_radius,
+		path_length
+	)
+	if maximum_distance - minimum_distance < 32.0:
+		return null
+
+	for _attempt in range(40):
+		var candidate_distance := _summon_placement_rng.randf_range(
+			minimum_distance,
+			maximum_distance
+		)
+		if (
+			absf(candidate_distance - boss.path_distance)
+			< BossEnemy.SPIDER_SUMMON_MIN_SEPARATION
+		):
+			continue
+		var candidate_position := _enemy_path.to_global(
+			_enemy_path.curve.sample_baked(candidate_distance)
+		)
+		if (
+			candidate_position.distance_to(boss.global_position)
+			< BossEnemy.SPIDER_SUMMON_MIN_SEPARATION
+		):
+			continue
+		if not _is_summon_position_clear(
+			candidate_position,
+			boss,
+			already_placed,
+			BossEnemy.SPIDER_SUMMON_MIN_SEPARATION
+		):
+			continue
+		return {
+			"path_distance": candidate_distance,
+			"position": candidate_position
+		}
+
+	return null
+
+
+func _is_summon_position_clear(
+	candidate: Vector2,
+	boss: BossEnemy,
+	already_placed: Array[Enemy],
+	minimum_enemy_separation: float
+) -> bool:
+	for existing in get_tree().get_nodes_in_group("enemies"):
+		if (
+			is_instance_valid(existing)
+			and existing != boss
+			and candidate.distance_to(existing.global_position)
+				< minimum_enemy_separation
+		):
+			return false
+	for tower in get_tree().get_nodes_in_group("towers"):
+		if (
+			is_instance_valid(tower)
+			and candidate.distance_to(tower.global_position) < 36.0
+		):
+			return false
+	for placed in already_placed:
+		if (
+			is_instance_valid(placed)
+			and candidate.distance_to(placed.global_position)
+				< minimum_enemy_separation
+		):
+			return false
+	for build_slot in get_tree().get_nodes_in_group("build_slots"):
+		if (
+			is_instance_valid(build_slot)
+			and candidate.distance_to(build_slot.global_position) < 32.0
+		):
+			return false
+	return true
+
+
+func _register_wave_enemy(wave: ActiveWave, enemy: Enemy) -> void:
+	var enemy_id := enemy.get_instance_id()
+	wave.active_enemies[enemy_id] = enemy
+	enemy.became_inactive.connect(
+		_on_enemy_became_inactive.bind(wave, enemy_id, enemy),
+		CONNECT_ONE_SHOT
+	)
+	enemy.tree_exited.connect(
+		_on_enemy_inactive.bind(wave, enemy_id),
+		CONNECT_ONE_SHOT
+	)
+
+
 func _spawn_next_enemy(wave: ActiveWave) -> void:
 	if wave.state != ActiveWave.State.SPAWNING:
 		return
 
-	while wave.group_index < wave.config.groups.size():
-		var current_group := wave.config.groups[wave.group_index]
-		if current_group.enemy_data != null and wave.spawned_in_group < maxi(
-			current_group.quantity,
-			0
-		):
-			break
-		if current_group.enemy_data == null and current_group.quantity > 0:
-			push_error("WaveManager found a wave group without EnemyData.")
-		wave.group_index += 1
-		wave.spawned_in_group = 0
+	var interleave_spiders := _wave_has_spider_group(wave)
+	if interleave_spiders:
+		wave.group_index = _get_next_interleaved_group(wave)
+		if wave.group_index < 0:
+			_finish_spawning(wave)
+			return
+	else:
+		while wave.group_index < wave.config.groups.size():
+			var current_group := wave.config.groups[wave.group_index]
+			if current_group.enemy_data != null and wave.spawned_in_group < maxi(
+				current_group.quantity,
+				0
+			):
+				break
+			if current_group.enemy_data == null and current_group.quantity > 0:
+				push_error("WaveManager found a wave group without EnemyData.")
+			wave.group_index += 1
+			wave.spawned_in_group = 0
 
-	if wave.group_index >= wave.config.groups.size():
-		_finish_spawning(wave)
-		return
+		if wave.group_index >= wave.config.groups.size():
+			_finish_spawning(wave)
+			return
 
 	var group := wave.config.groups[wave.group_index]
 	if group.enemy_data == null:
@@ -509,6 +912,11 @@ func _spawn_next_enemy(wave: ActiveWave) -> void:
 	if enemy == null:
 		push_error("WaveManager enemy scene must have an Enemy root.")
 		enemy_instance.free()
+		# Consume the slot so a broken spawn cannot leave the wave unfinishable.
+		wave.spawned_enemies += 1
+		_record_spawned_group_enemy(wave, interleave_spiders)
+		if wave.spawned_enemies >= wave.total_enemies:
+			_finish_spawning(wave)
 		return
 
 	var base_hp := group.enemy_data.base_hp
@@ -529,23 +937,57 @@ func _spawn_next_enemy(wave: ActiveWave) -> void:
 
 	_enemies_container.add_child(enemy)
 
-	var enemy_id := enemy.get_instance_id()
-	wave.active_enemies[enemy_id] = enemy
-	enemy.connect(
-		"became_inactive",
-		_on_enemy_inactive.bind(wave, enemy_id),
-		CONNECT_ONE_SHOT
-	)
-	enemy.tree_exited.connect(
-		_on_enemy_inactive.bind(wave, enemy_id),
-		CONNECT_ONE_SHOT
-	)
+	_register_wave_enemy(wave, enemy)
 	wave.spawned_enemies += 1
-	wave.spawned_in_group += 1
+	_record_spawned_group_enemy(wave, interleave_spiders)
 	_emit_wave_progress(wave)
 
 	if wave.spawned_enemies >= wave.total_enemies:
 		_finish_spawning(wave)
+
+
+func _wave_has_spider_group(wave: ActiveWave) -> bool:
+	for group in wave.config.groups:
+		if (
+			group.enemy_data != null
+			and group.enemy_data.enemy_id == &"spider"
+			and group.quantity > 0
+		):
+			return true
+	return false
+
+
+func _get_next_interleaved_group(wave: ActiveWave) -> int:
+	if wave.interleaved_group_spawn_counts.size() != wave.config.groups.size():
+		wave.interleaved_group_spawn_counts.resize(wave.config.groups.size())
+
+	for offset in range(wave.config.groups.size()):
+		var group_index := (
+			wave.last_interleaved_group_index + 1 + offset
+		) % wave.config.groups.size()
+		var group := wave.config.groups[group_index]
+		if (
+			group.enemy_data != null
+			and wave.interleaved_group_spawn_counts[group_index]
+				< maxi(group.quantity, 0)
+		):
+			return group_index
+	return -1
+
+
+func _record_spawned_group_enemy(
+	wave: ActiveWave,
+	interleave_spiders: bool
+) -> void:
+	if interleave_spiders:
+		wave.interleaved_group_spawn_counts[wave.group_index] += 1
+		wave.last_interleaved_group_index = wave.group_index
+	else:
+		wave.spawned_in_group += 1
+
+
+func get_remaining_spawn_count(wave: ActiveWave) -> int:
+	return maxi(wave.total_enemies - wave.spawned_enemies, 0)
 
 
 func _finish_spawning(wave: ActiveWave) -> void:
@@ -555,8 +997,6 @@ func _finish_spawning(wave: ActiveWave) -> void:
 	wave.state = ActiveWave.State.WAITING_FOR_ENEMIES
 	_emit_wave_progress(wave)
 	wave_spawn_completed.emit(wave.wave_number)
-	if auto_waves_enabled:
-		_schedule_automatic_start(wave.wave_number + 1)
 	_try_complete_wave(wave)
 
 
@@ -592,13 +1032,26 @@ func _emit_wave_progress(wave: ActiveWave) -> void:
 func _on_enemy_inactive(wave: ActiveWave, enemy_id: int) -> void:
 	if not wave.active_enemies.erase(enemy_id):
 		return
-
 	_emit_wave_progress(wave)
 	_try_complete_wave(wave)
 
 
+func _on_enemy_became_inactive(
+	wave: ActiveWave,
+	enemy_id: int,
+	enemy: Enemy
+) -> void:
+	if not is_instance_valid(enemy) or enemy.is_dead:
+		_on_enemy_inactive(wave, enemy_id)
+		return
+	_emit_wave_progress(wave)
+
+
 func _try_complete_wave(wave: ActiveWave) -> void:
 	if wave.state != ActiveWave.State.WAITING_FOR_ENEMIES:
+		return
+	# The countdown needs an empty spawn queue as well as no living enemies.
+	if get_remaining_spawn_count(wave) > 0:
 		return
 	if _get_active_enemy_count_for_wave(wave) > 0:
 		return
@@ -608,3 +1061,5 @@ func _try_complete_wave(wave: ActiveWave) -> void:
 	completed_wave_numbers.append(wave.wave_number)
 	wave_completed.emit(wave.wave_number)
 	active_waves_changed.emit()
+	if auto_waves_enabled:
+		_schedule_automatic_start(wave.wave_number + 1)

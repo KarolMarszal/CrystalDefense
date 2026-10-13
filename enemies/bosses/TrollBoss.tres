@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="BossData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://enemies/BossData.gd" id="1_boss"]
+[ext_resource type="Resource" path="res://enemies/Troll.tres" id="2_visual"]
+
+[resource]
+script = ExtResource("1_boss")
+boss_id = &"troll_boss"
+display_name = "Troll"
+visual_source = ExtResource("2_visual")
+base_hp = 4000
+base_speed = 30.0
+hp_growth_per_wave = 0.15
+trophy_capacity = 1
+base_gold_reward = 250
+base_essence_reward = 40
+ability = 3
+regeneration_fraction_per_second = 0.03
+low_hp_regeneration_fraction_per_second = 0.05

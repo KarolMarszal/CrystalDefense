@@ -1,7 +1,6 @@
 [gd_scene format=3 uid="uid://btl6gomue3gae"]
 
 [ext_resource type="Script" uid="uid://dy2q4c68vcdai" path="res://game/game.gd" id="1_wbfu4"]
-[ext_resource type="PackedScene" uid="uid://bm4011etsd7xx" path="res://towers/Tower.tscn" id="2_xkndl"]
 [ext_resource type="Script" uid="uid://ccc0corwcs13c" path="res://ui/gold_display.gd" id="3_gold_display"]
 [ext_resource type="PackedScene" path="res://build_slots/BuildSlot.tscn" id="4_sb48q"]
 [ext_resource type="PackedScene" path="res://ui/TowerPanel.tscn" id="5_tower_panel"]
@@ -12,6 +11,7 @@
 [ext_resource type="Resource" path="res://enemies/Skeleton.tres" id="19_skeleton_data"]
 [ext_resource type="Resource" path="res://enemies/Orc.tres" id="20_orc_data"]
 [ext_resource type="Resource" path="res://enemies/Troll.tres" id="21_troll_data"]
+[ext_resource type="Resource" path="res://enemies/Spider.tres" id="30_spider_data"]
 [ext_resource type="Script" path="res://enemies/EnemyData.gd" id="22_enemy_data"]
 [ext_resource type="Resource" path="res://wave_archetypes/Standard.tres" id="23_standard_archetype"]
 [ext_resource type="Resource" path="res://wave_archetypes/Swarm.tres" id="24_swarm_archetype"]
@@ -20,9 +20,12 @@
 [ext_resource type="Resource" path="res://wave_archetypes/Mixed.tres" id="27_mixed_archetype"]
 [ext_resource type="Script" path="res://wave_archetypes/WaveArchetype.gd" id="28_wave_archetype"]
 [ext_resource type="Resource" path="res://maps/Forest.tres" id="29_forest_map"]
-[ext_resource type="Script" path="res://waves/WaveEnemyGroup.gd" id="30_wave_enemy_group"]
 [ext_resource type="PackedScene" path="res://game/Castle.tscn" id="31_castle"]
 [ext_resource type="PackedScene" path="res://enemies/EnemyCamp.tscn" id="32_enemy_camp"]
+[ext_resource type="PackedScene" path="res://ui/RunCrystalInventoryPanel.tscn" id="33_run_inventory"]
+[ext_resource type="Script" path="res://ui/essence_display.gd" id="34_essence_display"]
+[ext_resource type="Script" path="res://ui/essence_progress_display.gd" id="36_essence_progress"]
+[ext_resource type="PackedScene" path="res://ui/MapCrystalDropSurface.tscn" id="35_map_drop_surface"]
 
 [sub_resource type="Curve2D" id="Curve2D_ognqv"]
 _data = {
@@ -54,16 +57,6 @@ _data = {
 )
 }
 point_count = 24
-
-[sub_resource type="Resource" id="OpeningSkeletonGroup"]
-script = ExtResource("30_wave_enemy_group")
-enemy_data = ExtResource("19_skeleton_data")
-quantity = 3
-
-[sub_resource type="Resource" id="OpeningTrollGroup"]
-script = ExtResource("30_wave_enemy_group")
-enemy_data = ExtResource("21_troll_data")
-quantity = 2
 
 [node name="Game" type="Node2D" unique_id=961720024]
 script = ExtResource("1_wbfu4")
@@ -107,20 +100,30 @@ active_map_data = ExtResource("29_forest_map")
 
 [node name="WaveGenerator" type="Node" parent="WaveManager"]
 script = ExtResource("17_wave_generator")
-enemy_catalog = Array[ExtResource("22_enemy_data")]([ExtResource("7_goblin_data"), ExtResource("18_kobold_data"), ExtResource("19_skeleton_data"), ExtResource("20_orc_data"), ExtResource("21_troll_data")])
+enemy_catalog = Array[ExtResource("22_enemy_data")]([ExtResource("7_goblin_data"), ExtResource("18_kobold_data"), ExtResource("19_skeleton_data"), ExtResource("20_orc_data"), ExtResource("21_troll_data"), ExtResource("30_spider_data")])
 archetypes = Array[ExtResource("28_wave_archetype")]([ExtResource("23_standard_archetype"), ExtResource("24_swarm_archetype"), ExtResource("25_fast_archetype"), ExtResource("26_heavy_archetype"), ExtResource("27_mixed_archetype")])
-opening_wave_groups = Array[ExtResource("30_wave_enemy_group")]([SubResource("OpeningSkeletonGroup"), SubResource("OpeningTrollGroup")])
-opening_wave_enemy = ExtResource("19_skeleton_data")
-opening_wave_quantity = 5
 base_budget = 10
 budget_growth = 4
 
-[node name="Tower" parent="." unique_id=432132845 instance=ExtResource("2_xkndl")]
-position = Vector2(405, 365)
-
 [node name="HUD" type="CanvasLayer" parent="." unique_id=478919480]
 
+[node name="MapCrystalDropSurface" parent="HUD" instance=ExtResource("35_map_drop_surface")]
+
 [node name="TowerPanel" parent="HUD" instance=ExtResource("5_tower_panel")]
+
+[node name="CrystalsButton" type="Button" parent="HUD"]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -210.0
+offset_top = 150.0
+offset_right = -20.0
+offset_bottom = 194.0
+grow_horizontal = 0
+theme_override_font_sizes/font_size = 16
+text = "CRYSTAL INVENTORY"
+
+[node name="RunCrystalInventoryPanel" parent="HUD" instance=ExtResource("33_run_inventory")]
 
 [node name="GoldLabel" type="Label" parent="HUD" unique_id=23774827]
 anchors_preset = 1
@@ -138,6 +141,40 @@ theme_override_font_sizes/font_size = 24
 text = "Gold: 0"
 horizontal_alignment = 2
 script = ExtResource("3_gold_display")
+
+[node name="EssenceLabel" type="Label" parent="HUD"]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -370.0
+offset_top = 16.0
+offset_right = -200.0
+offset_bottom = 52.0
+grow_horizontal = 0
+theme_override_colors/font_color = Color(0.66, 0.89, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 4
+theme_override_font_sizes/font_size = 22
+text = "Essence: 0"
+horizontal_alignment = 2
+script = ExtResource("34_essence_display")
+
+[node name="EssenceProgressLabel" type="Label" parent="HUD"]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -420.0
+offset_top = 54.0
+offset_right = -200.0
+offset_bottom = 84.0
+grow_horizontal = 0
+theme_override_colors/font_color = Color(0.66, 0.89, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 4
+theme_override_font_sizes/font_size = 18
+text = "Essence points: 0 / 100"
+horizontal_alignment = 2
+script = ExtResource("36_essence_progress")
 
 [node name="TrophyLabel" type="Label" parent="HUD"]
 anchors_preset = 1
@@ -238,20 +275,64 @@ theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 3
 theme_override_font_sizes/font_size = 20
 
+[node name="PauseButton" type="Button" parent="HUD"]
+offset_left = 20.0
+offset_top = 306.0
+offset_right = 140.0
+offset_bottom = 354.0
+theme_override_font_sizes/font_size = 18
+text = "PAUSE"
+
+[node name="SpeedHalfButton" type="Button" parent="HUD"]
+toggle_mode = true
+offset_left = 150.0
+offset_top = 306.0
+offset_right = 225.0
+offset_bottom = 354.0
+theme_override_font_sizes/font_size = 16
+text = "×0.5"
+
+[node name="SpeedNormalButton" type="Button" parent="HUD"]
+toggle_mode = true
+offset_left = 230.0
+offset_top = 306.0
+offset_right = 305.0
+offset_bottom = 354.0
+theme_override_font_sizes/font_size = 16
+text = "×1"
+
+[node name="SpeedDoubleButton" type="Button" parent="HUD"]
+toggle_mode = true
+offset_left = 310.0
+offset_top = 306.0
+offset_right = 385.0
+offset_bottom = 354.0
+theme_override_font_sizes/font_size = 16
+text = "×2"
+
+[node name="SpeedTripleButton" type="Button" parent="HUD"]
+toggle_mode = true
+offset_left = 390.0
+offset_top = 306.0
+offset_right = 465.0
+offset_bottom = 354.0
+theme_override_font_sizes/font_size = 16
+text = "×3"
+
 [node name="BuildSlot" parent="." unique_id=1835341151 instance=ExtResource("4_sb48q")]
 position = Vector2(275, 375)
-price = 5
 
 [node name="BuildSlot2" parent="." unique_id=1771076371 instance=ExtResource("4_sb48q")]
 position = Vector2(555, 375)
-price = 100
-
-[node name="Tower2" parent="." unique_id=761212656 instance=ExtResource("2_xkndl")]
-position = Vector2(720, 365)
 
 [node name="BuildSlot3" parent="." instance=ExtResource("4_sb48q")]
 position = Vector2(865, 375)
-price = 50
+
+[node name="BuildSlot4" parent="." instance=ExtResource("4_sb48q")]
+position = Vector2(405, 365)
+
+[node name="BuildSlot5" parent="." instance=ExtResource("4_sb48q")]
+position = Vector2(720, 365)
 
 [node name="GameOverOverlay" type="ColorRect" parent="HUD"]
 visible = false

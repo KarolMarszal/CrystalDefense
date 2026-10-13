@@ -10,6 +10,7 @@ display_name = "Troll"
 base_hp = 700
 base_speed = 35.0
 gold_reward = 50
+essence_points = 5
 visual_texture = ExtResource("2_visual")
 visual_scale = 0.45
 difficulty_cost = 8

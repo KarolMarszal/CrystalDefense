@@ -10,6 +10,7 @@ display_name = "Goblin"
 base_hp = 100
 base_speed = 100.0
 gold_reward = 10
+essence_points = 1
 visual_texture = ExtResource("2_visual")
 visual_scale = 0.27
 difficulty_cost = 2

@@ -18,16 +18,21 @@ const TOWER_UPGRADE_COST_GROWTH: float = 1.45
 const TOWER_UPGRADE_MULTIPLIER: float = 1.2
 const MAX_UPGRADE_COST: int = 9223372036854775807
 const BASIC_UPGRADE_NAMES: Array[String] = ["Damage", "Attack Speed", "Range"]
+const CRYSTAL_INSTALL_HIGHLIGHT_COLOR := Color(0.57, 1.0, 0.68, 0.8)
+const CRYSTAL_INSTALL_HOVER_COLOR := Color(1.0, 0.83, 0.36, 0.95)
+const CRYSTAL_REPLACE_HIGHLIGHT_COLOR := Color(0.72, 0.52, 1.0, 0.88)
+const CRYSTAL_REPLACE_HOVER_COLOR := Color(0.88, 0.68, 1.0, 1.0)
 
 var projectile_scene = preload("res://projectiles/Projectile.tscn")
 
-@export var base_damage: int = 25
-@export var base_attack_speed: float = 1.0
-@export var base_attack_range: float = 180.0
+@export var base_damage: float = 5.0
+@export var base_attack_speed: float = 0.50
+@export var base_attack_range: float = 140.0
 @export var target_priority: TargetPriority = TargetPriority.FIRST
 @export var prioritize_trophy_carriers: bool = true
 
 signal stats_changed
+signal external_attack_speed_modifier_expired(source_id: int)
 
 var tower_upgrade_levels: Array[int] = [0, 0, 0]
 
@@ -50,10 +55,18 @@ var attack_range: float:
 var attack_timer: float = 0.0
 var target = null
 var _range_visible: bool = false
+var _crystal_drop_highlight: bool = false
+var _crystal_drop_hovered: bool = false
+var _crystal_drop_replacement: bool = false
 var _main_socket: TowerSocket
 var _aura_enemies: Dictionary = {}
+var _external_attack_speed_multipliers: Dictionary = {}
+var _external_attack_speed_durations: Dictionary = {}
+var _external_attack_speed_debug_abilities: Dictionary = {}
+var _external_attack_speed_debug_contexts: Dictionary = {}
 
 @onready var _crystal_visual: Sprite2D = $CrystalVisual
+@onready var _crystal_socket_visual: CrystalSocketVisual = $CrystalSocketVisual
 
 var main_socket: TowerSocket:
 	get:
@@ -65,29 +78,104 @@ func _init() -> void:
 
 func _build_current_attack_configuration() -> AttackConfiguration:
 	var crystal_instance := get_main_crystal()
+	var configuration: AttackConfiguration
 	if crystal_instance != null:
-		return crystal_instance.definition.create_attack_configuration(
+		configuration = crystal_instance.definition.create_attack_configuration(
 			crystal_instance.level,
 			tower_upgrade_levels
 		)
-
-	var configuration := AttackConfiguration.new()
-	configuration.damage = base_damage
-	configuration.attack_speed = base_attack_speed
-	configuration.attack_range = base_attack_range
-	configuration.damage *= pow(
-		TOWER_UPGRADE_MULTIPLIER,
-		tower_upgrade_levels[UpgradeTrack.UPGRADE_1]
-	)
-	configuration.attack_speed *= pow(
-		TOWER_UPGRADE_MULTIPLIER,
-		tower_upgrade_levels[UpgradeTrack.UPGRADE_2]
-	)
-	configuration.attack_range *= pow(
-		TOWER_UPGRADE_MULTIPLIER,
-		tower_upgrade_levels[UpgradeTrack.UPGRADE_3]
-	)
+	else:
+		configuration = AttackConfiguration.new()
+		configuration.damage = base_damage
+		configuration.attack_speed = base_attack_speed
+		configuration.attack_range = base_attack_range
+		var effectiveness_ids: Array[StringName] = [
+			&"damage_upgrade_effectiveness",
+			&"speed_upgrade_effectiveness",
+			&"range_upgrade_effectiveness"
+		]
+		configuration.damage *= pow(
+			1.0 + (TOWER_UPGRADE_MULTIPLIER - 1.0) * (
+				1.0 + CrystalInventory.get_skill_effect_value(
+					effectiveness_ids[UpgradeTrack.UPGRADE_1]
+				)
+			),
+			tower_upgrade_levels[UpgradeTrack.UPGRADE_1]
+		)
+		configuration.attack_speed *= pow(
+			1.0 + (TOWER_UPGRADE_MULTIPLIER - 1.0) * (
+				1.0 + CrystalInventory.get_skill_effect_value(
+					effectiveness_ids[UpgradeTrack.UPGRADE_2]
+				)
+			),
+			tower_upgrade_levels[UpgradeTrack.UPGRADE_2]
+		)
+		configuration.attack_range *= pow(
+			1.0 + (TOWER_UPGRADE_MULTIPLIER - 1.0) * (
+				1.0 + CrystalInventory.get_skill_effect_value(
+					effectiveness_ids[UpgradeTrack.UPGRADE_3]
+				)
+			),
+			tower_upgrade_levels[UpgradeTrack.UPGRADE_3]
+		)
+		_apply_tower_foundation_bonuses(configuration)
+	for multiplier in _external_attack_speed_multipliers.values():
+		configuration.attack_speed *= float(multiplier)
 	return configuration
+
+
+func set_external_attack_speed_multiplier(
+	source_id: int,
+	multiplier: float,
+	duration: float = -1.0,
+	debug_ability: String = "",
+	debug_context: String = ""
+) -> void:
+	if not is_finite(multiplier):
+		return
+	var value := maxf(multiplier, 0.0)
+	var changed := not is_equal_approx(
+		float(_external_attack_speed_multipliers.get(source_id, 1.0)),
+		value
+	)
+	_external_attack_speed_multipliers[source_id] = value
+	if duration >= 0.0:
+		_external_attack_speed_durations[source_id] = duration
+		if not debug_ability.is_empty():
+			_external_attack_speed_debug_abilities[source_id] = debug_ability
+			_external_attack_speed_debug_contexts[source_id] = debug_context
+	elif duration < 0.0:
+		_external_attack_speed_durations.erase(source_id)
+		_external_attack_speed_debug_abilities.erase(source_id)
+		_external_attack_speed_debug_contexts.erase(source_id)
+	if changed:
+		stats_changed.emit()
+
+
+func update_external_attack_speed_multiplier(
+	source_id: int,
+	multiplier: float
+) -> void:
+	if not _external_attack_speed_multipliers.has(source_id):
+		return
+	var value := maxf(multiplier, 0.0)
+	if is_equal_approx(
+		float(_external_attack_speed_multipliers[source_id]),
+		value
+	):
+		return
+	_external_attack_speed_multipliers[source_id] = value
+	stats_changed.emit()
+
+
+func remove_external_attack_speed_multiplier(source_id: int) -> void:
+	if not _external_attack_speed_multipliers.has(source_id):
+		return
+	_external_attack_speed_multipliers.erase(source_id)
+	_external_attack_speed_durations.erase(source_id)
+	_external_attack_speed_debug_abilities.erase(source_id)
+	_external_attack_speed_debug_contexts.erase(source_id)
+	stats_changed.emit()
 
 
 func has_main_crystal() -> bool:
@@ -98,8 +186,54 @@ func get_main_crystal() -> CrystalInstance:
 	return _main_socket.crystal
 
 
+func can_install_main_crystal(crystal: CrystalData, crystal_level: int = 1) -> bool:
+	return _main_socket.can_install(crystal, crystal_level)
+
+
 func install_main_crystal(crystal: CrystalData, crystal_level: int = 1) -> bool:
+	if not can_install_main_crystal(crystal, crystal_level):
+		return false
 	if not _main_socket.install(crystal, crystal_level):
+		return false
+
+	attack_timer = 0.0
+	target = null
+	_update_crystal_visual()
+	queue_redraw()
+	stats_changed.emit()
+	return true
+
+
+func can_replace_main_crystal(
+	crystal: CrystalData,
+	crystal_level: int = 1
+) -> bool:
+	return _main_socket.can_replace(crystal, crystal_level)
+
+
+func replace_main_crystal(
+	crystal: CrystalData,
+	crystal_level: int = 1
+) -> CrystalInstance:
+	if not can_replace_main_crystal(crystal, crystal_level):
+		return null
+
+	var old_configuration := current_attack_configuration
+	var previous := _main_socket.replace(crystal, crystal_level)
+	if previous == null:
+		return null
+	if old_configuration.attack_behavior == CrystalData.AttackBehavior.AURA:
+		_clear_aura_effects()
+	attack_timer = 0.0
+	target = null
+	_update_crystal_visual()
+	queue_redraw()
+	stats_changed.emit()
+	return previous
+
+
+func restore_main_crystal(crystal: CrystalInstance) -> bool:
+	if crystal == null or not _main_socket.restore(crystal):
 		return false
 
 	attack_timer = 0.0
@@ -136,13 +270,30 @@ func get_upgrade_cost(track: UpgradeTrack) -> int:
 	if not is_finite(scaled_cost) or scaled_cost >= float(MAX_UPGRADE_COST):
 		return MAX_UPGRADE_COST
 
-
-	return maxi(roundi(scaled_cost), 1)
+	var reduction_effects: Array[StringName] = [
+		&"damage_upgrade_cost_reduction",
+		&"speed_upgrade_cost_reduction",
+		&"range_upgrade_cost_reduction"
+	]
+	var total_reduction := (
+		CrystalInventory.get_skill_effect_value(
+			reduction_effects[track_index]
+		)
+		+ CrystalInventory.get_skill_effect_value(
+			&"tower_upgrade_cost_reduction_all"
+		)
+	)
+	if total_reduction <= 0.0:
+		return roundi(scaled_cost)
+	var reduced_cost := scaled_cost * (1.0 - total_reduction)
+	return maxi(floori(reduced_cost), 1)
 
 
 func can_upgrade(track: UpgradeTrack) -> bool:
 	var track_index := int(track)
 	if track_index < 0 or track_index >= tower_upgrade_levels.size():
+		return false
+	if not CrystalInventory.is_skill_purchased(&"B"):
 		return false
 
 	var cost := get_upgrade_cost(track)
@@ -184,6 +335,7 @@ func get_upgrade_level(track: UpgradeTrack) -> int:
 
 
 func _ready() -> void:
+	add_to_group("towers")
 	var collision_shape := $CollisionShape2D as CollisionShape2D
 	var rectangle := RectangleShape2D.new()
 	rectangle.size = Vector2(50.0, 50.0)
@@ -199,10 +351,26 @@ func _update_crystal_visual() -> void:
 	if crystal_instance == null or crystal_instance.definition == null:
 		_crystal_visual.texture = null
 		_crystal_visual.visible = false
+		_crystal_socket_visual.occupied = false
 		return
 
 	_crystal_visual.texture = crystal_instance.definition.visual_texture
 	_crystal_visual.visible = _crystal_visual.texture != null
+	_crystal_socket_visual.occupied = true
+
+
+func _apply_tower_foundation_bonuses(
+	configuration: AttackConfiguration
+) -> void:
+	configuration.damage *= 1.0 + CrystalInventory.get_skill_effect_value(
+		&"tower_base_damage_bonus"
+	)
+	configuration.attack_speed *= 1.0 + CrystalInventory.get_skill_effect_value(
+		&"tower_base_speed_bonus"
+	)
+	configuration.attack_range *= 1.0 + CrystalInventory.get_skill_effect_value(
+		&"tower_base_range_bonus"
+	)
 
 
 func _exit_tree() -> void:
@@ -214,7 +382,39 @@ func set_range_visible(visible: bool) -> void:
 	queue_redraw()
 
 
+func set_crystal_drop_highlight(
+	enabled: bool,
+	hovered: bool = false,
+	replacement: bool = false
+) -> void:
+	_crystal_drop_highlight = enabled
+	_crystal_drop_hovered = enabled and hovered
+	_crystal_drop_replacement = enabled and replacement
+	queue_redraw()
+
+
 func _draw() -> void:
+	if _crystal_drop_highlight:
+		draw_arc(
+			Vector2.ZERO,
+			36.0,
+			0.0,
+			TAU,
+			48,
+			(
+				CRYSTAL_REPLACE_HOVER_COLOR
+				if _crystal_drop_hovered
+				else CRYSTAL_REPLACE_HIGHLIGHT_COLOR
+			)
+			if _crystal_drop_replacement
+			else (
+				CRYSTAL_INSTALL_HOVER_COLOR
+				if _crystal_drop_hovered
+				else CRYSTAL_INSTALL_HIGHLIGHT_COLOR
+			),
+			5.0 if _crystal_drop_hovered else 3.0,
+			true
+		)
 	if not _range_visible:
 		return
 
@@ -240,6 +440,7 @@ func _draw() -> void:
 
 
 func _process(delta: float) -> void:
+	_process_external_attack_speed_durations(delta)
 	var configuration := current_attack_configuration
 	if configuration.attack_behavior == CrystalData.AttackBehavior.AURA:
 		attack_timer = 0.0
@@ -258,6 +459,29 @@ func _process(delta: float) -> void:
 	):
 		attack_timer = 0.0
 		attack_target(configuration)
+
+
+func _process_external_attack_speed_durations(delta: float) -> void:
+	for source_id in _external_attack_speed_durations.keys():
+		var remaining := float(_external_attack_speed_durations[source_id]) - delta
+		if remaining > 0.0:
+			_external_attack_speed_durations[source_id] = remaining
+			continue
+		_external_attack_speed_durations.erase(source_id)
+		_external_attack_speed_multipliers.erase(source_id)
+		var ability := String(_external_attack_speed_debug_abilities.get(source_id, ""))
+		var context := String(_external_attack_speed_debug_contexts.get(source_id, ""))
+		_external_attack_speed_debug_abilities.erase(source_id)
+		_external_attack_speed_debug_contexts.erase(source_id)
+		stats_changed.emit()
+		external_attack_speed_modifier_expired.emit(source_id)
+		if not ability.is_empty():
+			BossAbilityDebug.log_external(
+				ability,
+				"debuff_expired",
+				"tower=%s" % name,
+				context
+			)
 
 
 func select_target(target_range: float = -1.0) -> Node2D:
@@ -359,11 +583,13 @@ func attack_target(configuration: AttackConfiguration = null) -> void:
 
 	projectile.global_position = global_position
 	projectile.target = target
-	projectile.damage = roundi(configuration.damage)
+	projectile.damage = configuration.damage
 	projectile.bleed_max_hp_fraction_per_second = (
 		configuration.bleed_max_hp_fraction_per_second
 	)
 	projectile.bleed_duration = configuration.bleed_duration
+	projectile.area_damage_fraction = configuration.area_damage_fraction
+	projectile.area_damage_radius = configuration.area_damage_radius
 
 	get_tree().current_scene.add_child(projectile)
 

@@ -1,0 +1,199 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://ui/SkillTreeScreen.gd" id="1_screen"]
+[ext_resource type="Script" path="res://ui/SkillTreeCanvas.gd" id="2_canvas"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+bg_color = Color(0.09, 0.14, 0.13, 0.98)
+border_color = Color(0.68, 0.58, 0.35, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
+[node name="SkillTreeScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_screen")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.15, 0.26, 0.19, 1)
+
+[node name="Root" type="PanelContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 14.0
+offset_top = 12.0
+offset_right = -14.0
+offset_bottom = -12.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="Margin" type="MarginContainer" parent="Root"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 10
+
+[node name="Contents" type="VBoxContainer" parent="Root/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Header" type="HBoxContainer" parent="Root/Margin/Contents"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="Root/Margin/Contents/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 24
+text = "AWAKENING MAGIC"
+vertical_alignment = 1
+
+[node name="Essence" type="Label" parent="Root/Margin/Contents/Header"]
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.66, 0.89, 1, 1)
+theme_override_font_sizes/font_size = 18
+text = "Essence: 0"
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="BackButton" type="Button" parent="Root/Margin/Contents/Header"]
+custom_minimum_size = Vector2(150, 44)
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "BACK TO MENU"
+
+[node name="Body" type="HBoxContainer" parent="Root/Margin/Contents"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 10
+
+[node name="TreePanel" type="PanelContainer" parent="Root/Margin/Contents/Body"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="Margin" type="MarginContainer" parent="Root/Margin/Contents/Body/TreePanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 5
+theme_override_constants/margin_top = 5
+theme_override_constants/margin_right = 5
+theme_override_constants/margin_bottom = 5
+
+[node name="Scroll" type="ScrollContainer" parent="Root/Margin/Contents/Body/TreePanel/Margin"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+horizontal_scroll_mode = 1
+vertical_scroll_mode = 1
+follow_focus = true
+
+[node name="TreeCanvas" type="Control" parent="Root/Margin/Contents/Body/TreePanel/Margin/Scroll"]
+custom_minimum_size = Vector2(2860, 1700)
+layout_mode = 2
+script = ExtResource("2_canvas")
+
+[node name="Details" type="PanelContainer" parent="Root/Margin/Contents/Body"]
+custom_minimum_size = Vector2(280, 0)
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="Margin" type="MarginContainer" parent="Root/Margin/Contents/Body/Details"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 10
+
+[node name="Contents" type="VBoxContainer" parent="Root/Margin/Contents/Body/Details/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Title" type="Label" parent="Root/Margin/Contents/Body/Details/Margin/Contents"]
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Select a skill"
+autowrap_mode = 2
+
+[node name="Category" type="Label" parent="Root/Margin/Contents/Body/Details/Margin/Contents"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.83, 0.36, 1)
+theme_override_font_sizes/font_size = 13
+text = "Category:"
+autowrap_mode = 2
+
+[node name="Description" type="Label" parent="Root/Margin/Contents/Body/Details/Margin/Contents"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_colors/font_color = Color(0.83, 0.83, 0.76, 1)
+theme_override_font_sizes/font_size = 14
+text = "Select a node to inspect its requirements and effect."
+autowrap_mode = 2
+vertical_alignment = 1
+
+[node name="Cost" type="Label" parent="Root/Margin/Contents/Body/Details/Margin/Contents"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Cost:"
+
+[node name="Prerequisites" type="Label" parent="Root/Margin/Contents/Body/Details/Margin/Contents"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Prerequisites:"
+autowrap_mode = 2
+
+[node name="Effect" type="Label" parent="Root/Margin/Contents/Body/Details/Margin/Contents"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.83, 0.83, 0.76, 1)
+theme_override_font_sizes/font_size = 12
+text = "Effect:"
+autowrap_mode = 2
+
+[node name="State" type="Label" parent="Root/Margin/Contents/Body/Details/Margin/Contents"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "State:"
+
+[node name="PurchaseButton" type="Button" parent="Root/Margin/Contents/Body/Details/Margin/Contents"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "PURCHASE"
+
+[node name="Feedback" type="Label" parent="Root/Margin/Contents/Body/Details/Margin/Contents"]
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.57, 1, 0.68, 1)
+theme_override_font_sizes/font_size = 12
+text = ""
+autowrap_mode = 2
+
+[node name="Legend" type="Label" parent="Root/Margin/Contents/Body/Details/Margin/Contents"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "Green: purchased\nGold: affordable\nOrange: unaffordable\nGray: locked\nSwipe, scroll, or use the scroll bars to navigate."
+autowrap_mode = 2

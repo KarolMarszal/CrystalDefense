@@ -2,9 +2,16 @@ extends Node
 
 signal profile_changed(profile: Dictionary)
 signal save_status_changed(success: bool, message: String)
+signal run_inventory_changed
+signal essence_awarded(amount: int)
 
-const CURRENT_SCHEMA_VERSION: int = 1
+const CURRENT_SCHEMA_VERSION: int = 4
 const MAX_ESSENCE: int = 9007199254740991
+const FIRST_ESSENCE_THRESHOLD: int = 100
+const MAX_ESSENCE_THRESHOLD: int = 1000000000000000
+const ESSENCE_THRESHOLD_GROWTH_PERCENT: int = 105
+const MAX_CRYSTAL_SHOP_PURCHASES: int = MAX_ESSENCE
+const MAX_CRYSTAL_SHOP_PRICE: int = 100
 const MAX_CRYSTAL_ENTRIES: int = 100
 const MAX_CRYSTAL_LEVEL: int = 10000
 const MAX_CRYSTAL_QUANTITY: int = 1000000
@@ -19,6 +26,15 @@ const PROFILE_FILE_NAME: String = "player_profile.json"
 const PROFILE_TEMP_FILE_NAME: String = "player_profile.tmp"
 const PROFILE_BACKUP_FILE_NAME: String = "player_profile.bak"
 const PROFILE_BACKUP_TEMP_FILE_NAME: String = "player_profile.bak.tmp"
+const AWAKENING_RAPID_FIRE_REWARD_CLAIM: String = "awakening_rapid_fire_crystal"
+const AWAKENING_KINETIC_REWARD_CLAIM: String = "awakening_kinetic_crystal"
+static func get_skill_crystal_rewards() -> Dictionary:
+	var rewards: Dictionary = {}
+	for definition in SKILL_CATALOG.get_skill_definitions():
+		var crystal_id := String(definition["unlock_crystal_id"])
+		if not crystal_id.is_empty():
+			rewards[String(definition["id"])] = crystal_id
+	return rewards
 
 const SKILL_TREE_KEYS: Array[String] = [
 	"crystals",
@@ -29,15 +45,24 @@ const SKILL_TREE_KEYS: Array[String] = [
 
 const CRYSTAL_CATALOG: Dictionary = {
 	"rapid_fire": preload("res://crystals/RapidFireCrystal.tres"),
+	"kinetic": preload("res://crystals/KineticCrystal.tres"),
+	"sniper": preload("res://crystals/SniperCrystal.tres"),
+	"fire": preload("res://crystals/FireCrystal.tres"),
 	"slow": preload("res://crystals/SlowCrystal.tres"),
 	"bleed": preload("res://crystals/BleedCrystal.tres")
 }
+const SKILL_CATALOG = preload("res://managers/skill_tree_catalog.gd")
 
 @export var profile_storage_directory: String = "user://"
 
 var _profile: Dictionary = {}
+var _run_crystals: Dictionary = {}
+var _skill_effect_values: Dictionary = {}
+var _run_inventory_active: bool = false
 var _profile_writable: bool = false
 var _last_parse_error: String = ""
+var _profile_requires_migration_save: bool = false
+var _crystal_shop_rng := RandomNumberGenerator.new()
 var last_load_success: bool = false
 var last_load_message: String = "Profile has not been loaded."
 var last_save_success: bool = false
@@ -49,10 +74,12 @@ var essence: int:
 
 
 func _ready() -> void:
+	_crystal_shop_rng.randomize()
 	load_profile()
 
 
 func load_profile() -> bool:
+	_skill_effect_values.clear()
 	_profile_writable = false
 	var profile_path := _get_profile_path(PROFILE_FILE_NAME)
 	var backup_path := _get_profile_path(PROFILE_BACKUP_FILE_NAME)
@@ -78,7 +105,7 @@ func load_profile() -> bool:
 		_profile_writable = true
 		last_load_success = true
 		last_load_message = "Loaded player profile."
-		if int(primary["schema_version"]) != CURRENT_SCHEMA_VERSION:
+		if _profile_requires_migration_save:
 			last_load_message = "Loaded player profile and applied schema migration."
 			if not save_profile():
 				last_load_message += " Migration save failed: " + last_save_message
@@ -173,11 +200,117 @@ func spend_essence(amount: int) -> bool:
 	return _commit_profile(candidate)
 
 
+static func get_crystal_shop_price_for_purchase_count(purchase_count: int) -> int:
+	if purchase_count >= 29:
+		return MAX_CRYSTAL_SHOP_PRICE
+	if purchase_count <= 0:
+		return 1
+
+	var numerator := 10 + 5 * purchase_count + purchase_count * purchase_count
+	return mini(int((numerator + 9) / 10), MAX_CRYSTAL_SHOP_PRICE)
+
+
+func get_crystal_shop_purchase_count() -> int:
+	return int(_profile.get("crystal_shop_purchase_count", 0))
+
+
+func get_crystal_shop_price() -> int:
+	return get_crystal_shop_price_for_purchase_count(
+		get_crystal_shop_purchase_count()
+	)
+
+
+func get_crystal_shop_eligible_ids() -> Array[StringName]:
+	var eligible: Array[StringName] = []
+	for crystal_id in _profile.get("unlocked_crystal_ids", []):
+		var id := StringName(crystal_id)
+		if is_crystal_unlocked(id):
+			eligible.append(id)
+	return eligible
+
+
+func purchase_random_crystal() -> bool:
+	if not is_crystal_inventory_unlocked():
+		return false
+
+	var purchase_count := get_crystal_shop_purchase_count()
+	if purchase_count >= MAX_CRYSTAL_SHOP_PURCHASES:
+		return false
+	var price := get_crystal_shop_price_for_purchase_count(purchase_count)
+	if essence < price:
+		return false
+
+	var eligible_ids := get_crystal_shop_eligible_ids()
+	if eligible_ids.is_empty():
+		return false
+
+	var selected_id: StringName = eligible_ids[
+		_crystal_shop_rng.randi_range(0, eligible_ids.size() - 1)
+	]
+	var candidate := _profile.duplicate(true)
+	candidate["essence"] = essence - price
+	candidate["crystal_shop_purchase_count"] = purchase_count + 1
+	if not _add_crystal_to_profile(candidate, String(selected_id), 1, 1):
+		return false
+	return _commit_profile(candidate)
+
+
+# Each threshold is the previous one plus 5%, rounded up. Integer math avoids
+# float error (100 * 1.05 would otherwise round up to 106).
+static func get_next_essence_threshold(current_threshold: int) -> int:
+	var grown := (
+		current_threshold * ESSENCE_THRESHOLD_GROWTH_PERCENT + 99
+	) / 100
+	return mini(maxi(grown, current_threshold), MAX_ESSENCE_THRESHOLD)
+
+
+func get_essence_points() -> int:
+	return int(_profile.get("essence_points", 0))
+
+
+func get_essence_threshold() -> int:
+	return int(_profile.get("essence_threshold", FIRST_ESSENCE_THRESHOLD))
+
+
+# Adds hidden progress points and converts every crossed threshold into one
+# persistent Essence in a single atomic profile commit. Returns the number of
+# Essence awarded, or -1 if nothing could be saved.
+func add_essence_points(points: int) -> int:
+	if points <= 0:
+		return 0
+
+	var accumulated := get_essence_points()
+	var threshold := get_essence_threshold()
+	if accumulated > MAX_ESSENCE_THRESHOLD - points:
+		return -1
+	accumulated += points
+	var awarded := 0
+	while accumulated >= threshold:
+		accumulated -= threshold
+		threshold = get_next_essence_threshold(threshold)
+		awarded += 1
+	if essence > MAX_ESSENCE - awarded:
+		return -1
+
+	var candidate := _profile.duplicate(true)
+	candidate["essence_points"] = accumulated
+	candidate["essence_threshold"] = threshold
+	candidate["essence"] = essence + awarded
+	if not _commit_profile(candidate):
+		return -1
+	if awarded > 0:
+		essence_awarded.emit(awarded)
+	return awarded
+
+
 func add_crystal(
 	crystal: CrystalData,
 	crystal_level: int = 1,
 	quantity: int = 1
 ) -> bool:
+	if not is_crystal_inventory_unlocked():
+		push_error("Cannot add crystals before skill A unlocks the inventory.")
+		return false
 	if crystal == null:
 		push_error("Cannot add a null Crystal to the persistent inventory.")
 		return false
@@ -194,6 +327,22 @@ func add_crystal(
 		return false
 
 	var candidate := _profile.duplicate(true)
+	if not _add_crystal_to_profile(
+		candidate,
+		crystal_id,
+		crystal_level,
+		quantity
+	):
+		return false
+	return _commit_profile(candidate)
+
+
+func _add_crystal_to_profile(
+	candidate: Dictionary,
+	crystal_id: String,
+	crystal_level: int,
+	quantity: int
+) -> bool:
 	var entries: Array = candidate["crystals"]
 	var found_index := -1
 	for index in range(entries.size()):
@@ -220,7 +369,7 @@ func add_crystal(
 		})
 
 	candidate["crystals"] = entries
-	return _commit_profile(candidate)
+	return true
 
 
 func get_owned_crystals() -> Array[Dictionary]:
@@ -237,6 +386,539 @@ func get_owned_crystals() -> Array[Dictionary]:
 	return snapshot
 
 
+func get_crystal_definition(crystal_id: StringName) -> CrystalData:
+	return CRYSTAL_CATALOG.get(String(crystal_id)) as CrystalData
+
+
+func is_crystal_unlocked(crystal_id: StringName) -> bool:
+	if (
+		not is_crystal_inventory_unlocked()
+		or not CRYSTAL_CATALOG.has(String(crystal_id))
+	):
+		return false
+	return _profile.get("unlocked_crystal_ids", []).has(String(crystal_id))
+
+
+func is_crystal_inventory_unlocked() -> bool:
+	return is_skill_purchased(&"A")
+
+
+func get_purchased_skill_node_ids(tree_id: StringName) -> Array[String]:
+	var purchased: Array[String] = []
+	var tree_key := String(tree_id)
+	if not SKILL_TREE_KEYS.has(tree_key):
+		return purchased
+
+	for node_id in _profile.get("purchased_skill_nodes", {}).get(tree_key, []):
+		purchased.append(String(node_id))
+	return purchased
+
+
+func is_skill_purchased(skill_id: StringName) -> bool:
+	var definition := SKILL_CATALOG.get_skill_definition(skill_id)
+	if definition.is_empty():
+		return false
+	return get_purchased_skill_node_ids(
+		StringName(definition["category"])
+	).has(String(skill_id))
+
+
+func get_skill_effect_value(effect_id: StringName) -> float:
+	if _skill_effect_values.has(effect_id):
+		return float(_skill_effect_values[effect_id])
+
+	var total := 0.0
+	for tree_id in SKILL_TREE_KEYS:
+		for skill_id in get_purchased_skill_node_ids(StringName(tree_id)):
+			var definition := SKILL_CATALOG.get_skill_definition(
+				StringName(skill_id)
+			)
+			if (
+				not definition.is_empty()
+				and definition["effect_id"] == String(effect_id)
+			):
+				total += float(definition["effect_value"])
+	_skill_effect_values[effect_id] = total
+	return total
+
+
+func get_skill_node_status(skill_id: StringName) -> Dictionary:
+	var definition := SKILL_CATALOG.get_skill_definition(skill_id)
+	if definition.is_empty():
+		return {"state": "invalid"}
+
+	var prerequisites: Array[String] = []
+	for tree_id in SKILL_TREE_KEYS:
+		prerequisites.append_array(
+			get_purchased_skill_node_ids(StringName(tree_id))
+		)
+	var missing := SKILL_CATALOG.get_missing_prerequisites(
+		skill_id,
+		prerequisites
+	)
+	var purchased := prerequisites.has(String(skill_id))
+	var visible := (
+		String(definition["visible_after"]).is_empty()
+		or prerequisites.has(String(definition["visible_after"]))
+	)
+	var state := "locked"
+	if not visible:
+		state = "hidden"
+	elif purchased:
+		state = "purchased"
+	elif not missing.is_empty():
+		state = "locked"
+	elif essence < int(definition["cost"]):
+		state = "unaffordable"
+	else:
+		state = "available"
+
+	return {
+		"definition": definition,
+		"state": state,
+		"visible": visible,
+		"purchased": purchased,
+		"missing_prerequisites": missing,
+		"can_purchase": state == "available"
+	}
+
+
+func purchase_skill_node(skill_id: StringName) -> bool:
+	var status := get_skill_node_status(skill_id)
+	if not bool(status.get("can_purchase", false)):
+		return false
+
+	var definition: Dictionary = status["definition"]
+	var cost := int(definition["cost"])
+	var reward_crystal_id: String = get_skill_crystal_rewards().get(
+		String(skill_id),
+		""
+	)
+	var reward_claim := "skill_crystal_reward_%s" % String(skill_id)
+	var grants_skill_crystal: bool = (
+		not reward_crystal_id.is_empty()
+		and (
+			not _profile["reward_claims"].has(reward_claim)
+			or not _owns_crystal_any_level(reward_crystal_id)
+		)
+	)
+	var grants_awakening_crystal: bool = (
+		String(skill_id) == "A"
+		and not _profile["reward_claims"].has(
+			AWAKENING_RAPID_FIRE_REWARD_CLAIM
+		)
+	)
+	var grants_awakening_kinetic: bool = (
+		String(skill_id) == "A"
+		and not _profile["reward_claims"].has(
+			AWAKENING_KINETIC_REWARD_CLAIM
+		)
+	)
+	var category := String(definition["category"])
+	var candidate := _profile.duplicate(true)
+	candidate["essence"] = int(candidate["essence"]) - cost
+	var purchased_by_tree: Dictionary = candidate["purchased_skill_nodes"]
+	var purchased_ids: Array = purchased_by_tree[category]
+	if purchased_ids.has(String(skill_id)):
+		return false
+	purchased_ids.append(String(skill_id))
+	purchased_by_tree[category] = purchased_ids
+	candidate["purchased_skill_nodes"] = purchased_by_tree
+
+	var unlocked_crystal_id := String(definition["unlock_crystal_id"])
+	if not unlocked_crystal_id.is_empty():
+		var unlocked_ids: Array = candidate["unlocked_crystal_ids"]
+		if not unlocked_ids.has(unlocked_crystal_id):
+			unlocked_ids.append(unlocked_crystal_id)
+		candidate["unlocked_crystal_ids"] = unlocked_ids
+	if not reward_crystal_id.is_empty():
+		var reward_unlocked_ids: Array = candidate["unlocked_crystal_ids"]
+		if not reward_unlocked_ids.has(reward_crystal_id):
+			reward_unlocked_ids.append(reward_crystal_id)
+		candidate["unlocked_crystal_ids"] = reward_unlocked_ids
+
+	if String(skill_id) == "A":
+		if (
+			not _grant_awakening_rapid_fire_crystal(candidate)
+			or not _grant_awakening_kinetic_crystal(candidate)
+		):
+			_set_save_status(
+				false,
+				"Could not grant the Awakening Magic rewards: " + _last_parse_error
+			)
+			return false
+	elif grants_skill_crystal and not _grant_skill_crystal_reward(
+		candidate,
+		reward_crystal_id,
+		reward_claim
+	):
+		_set_save_status(
+			false,
+			"Could not grant the %s skill reward: %s"
+			% [String(skill_id), _last_parse_error]
+		)
+		return false
+
+	if not _commit_profile(candidate):
+		return false
+	if grants_awakening_crystal and _run_inventory_active:
+		_store_run_crystal(&"rapid_fire", 1, 1)
+		run_inventory_changed.emit()
+	if grants_awakening_kinetic and _run_inventory_active:
+		_store_run_crystal(&"kinetic", 1, 1)
+		run_inventory_changed.emit()
+	if grants_skill_crystal and _run_inventory_active:
+		if not add_run_crystal(StringName(reward_crystal_id), 1, 1):
+			push_error(
+				"Skill %s reward was saved but could not be added to this run's inventory."
+				% String(skill_id)
+			)
+	return true
+
+
+func reset_purchased_skill_nodes() -> bool:
+	var candidate := _profile.duplicate(true)
+	var purchased_by_tree: Dictionary = candidate["purchased_skill_nodes"]
+	var refunded_essence := 0
+	var skill_unlocked_crystals: Dictionary = {}
+	var refunded_skill_ids: Dictionary = {}
+
+	for tree_id in SKILL_TREE_KEYS:
+		var purchased_ids: Array = purchased_by_tree[tree_id]
+		for purchased_id in purchased_ids:
+			if refunded_skill_ids.has(purchased_id):
+				continue
+			var definition := SKILL_CATALOG.get_skill_definition(
+				StringName(purchased_id)
+			)
+			if definition.is_empty() or definition["category"] != tree_id:
+				_set_save_status(
+					false,
+					"Cannot reset unknown skill '%s' in '%s'." % [
+						purchased_id,
+						tree_id
+					]
+				)
+				return false
+			refunded_skill_ids[purchased_id] = true
+			refunded_essence += int(definition["cost"])
+			var crystal_id := String(definition["unlock_crystal_id"])
+			if not crystal_id.is_empty():
+				skill_unlocked_crystals[crystal_id] = true
+			var reward_crystal_id: String = get_skill_crystal_rewards().get(
+				String(purchased_id),
+				""
+			)
+			if not reward_crystal_id.is_empty():
+				skill_unlocked_crystals[reward_crystal_id] = true
+		purchased_by_tree[tree_id] = []
+
+	if essence > MAX_ESSENCE - refunded_essence:
+		_set_save_status(false, "Skill reset refund would exceed the Essence limit.")
+		return false
+
+	candidate["essence"] = essence + refunded_essence
+	candidate["purchased_skill_nodes"] = purchased_by_tree
+	if candidate["reward_claims"].has("skill_crystal_reward_I"):
+		skill_unlocked_crystals["fire"] = true
+	var unlocked_crystal_ids: Array = candidate["unlocked_crystal_ids"]
+	unlocked_crystal_ids = unlocked_crystal_ids.filter(
+		func(crystal_id: String) -> bool:
+			return not skill_unlocked_crystals.has(crystal_id)
+	)
+	candidate["unlocked_crystal_ids"] = unlocked_crystal_ids
+	return _commit_profile(candidate)
+
+
+func start_run_inventory() -> void:
+	_run_crystals.clear()
+	_run_inventory_active = true
+	if is_crystal_inventory_unlocked():
+		for entry in _profile.get("crystals", []):
+			var crystal_id := StringName(entry["crystal_id"])
+			var level := int(entry["level"])
+			_store_run_crystal(crystal_id, level, int(entry["quantity"]))
+	run_inventory_changed.emit()
+
+
+func end_run_inventory() -> void:
+	if not _run_inventory_active and _run_crystals.is_empty():
+		return
+
+	_run_crystals.clear()
+	_run_inventory_active = false
+	run_inventory_changed.emit()
+
+
+func is_run_inventory_active() -> bool:
+	return _run_inventory_active
+
+
+func get_available_crystals() -> Array[Dictionary]:
+	var snapshot: Array[Dictionary] = []
+	var keys: Array = _run_crystals.keys()
+	keys.sort()
+	for key in keys:
+		var entry: Dictionary = _run_crystals[key]
+		var definition := _get_crystal_definition(entry["crystal_id"])
+		if definition == null:
+			continue
+		snapshot.append({
+			"crystal_id": String(entry["crystal_id"]),
+			"definition": definition,
+			"level": int(entry["level"]),
+			"quantity": int(entry["quantity"])
+		})
+	return snapshot
+
+
+func get_available_crystal_quantity(crystal_id: StringName, level: int) -> int:
+	if not _run_inventory_active or not _is_valid_run_crystal(crystal_id, level):
+		return 0
+
+	var entry: Dictionary = _run_crystals.get(
+		_get_run_crystal_key(crystal_id, level),
+		{}
+	)
+	return int(entry.get("quantity", 0))
+
+
+func get_available_crystal_level(crystal_id: StringName) -> int:
+	var levels: Array[int] = []
+	for entry in _run_crystals.values():
+		if entry["crystal_id"] == String(crystal_id) and int(entry["quantity"]) > 0:
+			levels.append(int(entry["level"]))
+	if levels.is_empty():
+		return 0
+	levels.sort()
+	return levels[0]
+
+
+func add_run_crystal(
+	crystal_id: StringName,
+	level: int = 1,
+	quantity: int = 1
+) -> bool:
+	if (
+		not _run_inventory_active
+		or not _is_valid_run_crystal(crystal_id, level)
+		or quantity < 1
+		or quantity > MAX_CRYSTAL_QUANTITY
+	):
+		return false
+
+	var key := _get_run_crystal_key(crystal_id, level)
+	var existing: Dictionary = _run_crystals.get(key, {})
+	var existing_quantity := int(existing.get("quantity", 0))
+	if existing_quantity > MAX_CRYSTAL_QUANTITY - quantity:
+		return false
+	if existing.is_empty() and _run_crystals.size() >= MAX_CRYSTAL_ENTRIES:
+		return false
+
+	_store_run_crystal(crystal_id, level, existing_quantity + quantity)
+	run_inventory_changed.emit()
+	return true
+
+
+func can_install_crystal(crystal: CrystalData, level: int = 1) -> bool:
+	if crystal == null:
+		return false
+	var crystal_id := StringName(crystal.crystal_id)
+	return (
+		_is_valid_run_crystal(crystal_id, level)
+		and get_available_crystal_quantity(crystal_id, level) > 0
+	)
+
+
+func consume_run_crystal(crystal: CrystalData, level: int = 1) -> bool:
+	if not can_install_crystal(crystal, level):
+		return false
+
+	var key := _get_run_crystal_key(StringName(crystal.crystal_id), level)
+	var entry: Dictionary = _run_crystals[key]
+	var quantity := int(entry["quantity"]) - 1
+	if quantity == 0:
+		_run_crystals.erase(key)
+	else:
+		entry["quantity"] = quantity
+		_run_crystals[key] = entry
+	run_inventory_changed.emit()
+	return true
+
+
+func can_return_run_crystal(crystal: CrystalInstance) -> bool:
+	if (
+		not _run_inventory_active
+		or crystal == null
+		or crystal.definition == null
+	):
+		return false
+	var crystal_id := StringName(crystal.definition.crystal_id)
+	if not _is_valid_run_crystal(crystal_id, crystal.level):
+		return false
+	var key := _get_run_crystal_key(crystal_id, crystal.level)
+	var existing: Dictionary = _run_crystals.get(key, {})
+	if int(existing.get("quantity", 0)) >= MAX_CRYSTAL_QUANTITY:
+		return false
+	return not existing.is_empty() or _run_crystals.size() < MAX_CRYSTAL_ENTRIES
+
+
+func can_replace_run_crystal(
+	incoming_crystal_id: StringName,
+	incoming_level: int,
+	outgoing_crystal: CrystalInstance
+) -> bool:
+	if (
+		not _run_inventory_active
+		or outgoing_crystal == null
+		or outgoing_crystal.definition == null
+	):
+		return false
+	var outgoing_id := StringName(outgoing_crystal.definition.crystal_id)
+	if not _is_valid_run_crystal(outgoing_id, outgoing_crystal.level):
+		return false
+
+	if (
+		outgoing_id == incoming_crystal_id
+		and outgoing_crystal.level == incoming_level
+	):
+		return true
+	if (
+		not _is_valid_run_crystal(incoming_crystal_id, incoming_level)
+		or get_available_crystal_quantity(incoming_crystal_id, incoming_level) < 1
+		or get_available_crystal_quantity(
+			outgoing_id,
+			outgoing_crystal.level
+		) >= MAX_CRYSTAL_QUANTITY
+	):
+		return false
+
+	var candidate := _run_crystals.duplicate(true)
+	_adjust_run_crystal_quantity(
+		candidate,
+		incoming_crystal_id,
+		incoming_level,
+		-1
+	)
+	_adjust_run_crystal_quantity(
+		candidate,
+		outgoing_id,
+		outgoing_crystal.level,
+		1
+	)
+	return candidate.size() <= MAX_CRYSTAL_ENTRIES
+
+
+func replace_run_crystal(
+	incoming_crystal_id: StringName,
+	incoming_level: int,
+	outgoing_crystal: CrystalInstance
+) -> bool:
+	if not can_replace_run_crystal(
+		incoming_crystal_id,
+		incoming_level,
+		outgoing_crystal
+	):
+		return false
+
+	if (
+		StringName(outgoing_crystal.definition.crystal_id) == incoming_crystal_id
+		and outgoing_crystal.level == incoming_level
+	):
+		return true
+
+	var candidate := _run_crystals.duplicate(true)
+	_adjust_run_crystal_quantity(
+		candidate,
+		incoming_crystal_id,
+		incoming_level,
+		-1
+	)
+	_adjust_run_crystal_quantity(
+		candidate,
+		StringName(outgoing_crystal.definition.crystal_id),
+		outgoing_crystal.level,
+		1
+	)
+	if candidate.size() > MAX_CRYSTAL_ENTRIES:
+		return false
+
+	_run_crystals = candidate
+	run_inventory_changed.emit()
+	return true
+
+
+func return_run_crystal(crystal: CrystalInstance) -> bool:
+	if not can_return_run_crystal(crystal):
+		return false
+
+	var crystal_id := StringName(crystal.definition.crystal_id)
+	var level := crystal.level
+	var key := _get_run_crystal_key(crystal_id, level)
+	var existing: Dictionary = _run_crystals.get(key, {})
+	_store_run_crystal(
+		crystal_id,
+		level,
+		int(existing.get("quantity", 0)) + 1
+	)
+	run_inventory_changed.emit()
+	return true
+
+
+func _adjust_run_crystal_quantity(
+	inventory: Dictionary,
+	crystal_id: StringName,
+	level: int,
+	delta: int
+) -> void:
+	var key := _get_run_crystal_key(crystal_id, level)
+	var entry: Dictionary = inventory.get(key, {
+		"crystal_id": String(crystal_id),
+		"level": level,
+		"quantity": 0
+	})
+	var quantity := int(entry["quantity"]) + delta
+	if quantity <= 0:
+		inventory.erase(key)
+	else:
+		entry["quantity"] = quantity
+		inventory[key] = entry
+
+
+func _is_valid_run_crystal(crystal_id: StringName, level: int) -> bool:
+	return (
+		_run_inventory_active
+		and is_crystal_inventory_unlocked()
+		and level >= 1
+		and level <= MAX_CRYSTAL_LEVEL
+		and CRYSTAL_CATALOG.has(String(crystal_id))
+	)
+
+
+func _get_crystal_definition(crystal_id: StringName) -> CrystalData:
+	return CRYSTAL_CATALOG.get(String(crystal_id)) as CrystalData
+
+
+func _get_run_crystal_key(crystal_id: StringName, level: int) -> String:
+	return "%s:%d" % [String(crystal_id), level]
+
+
+func _store_run_crystal(
+	crystal_id: StringName,
+	level: int,
+	quantity: int
+) -> void:
+	var key := _get_run_crystal_key(crystal_id, level)
+	if quantity <= 0:
+		_run_crystals.erase(key)
+		return
+	_run_crystals[key] = {
+		"crystal_id": String(crystal_id),
+		"level": level,
+		"quantity": quantity
+	}
+
+
 func _commit_profile(candidate: Dictionary) -> bool:
 	var normalized := _normalize_profile(candidate)
 	if normalized.is_empty():
@@ -246,6 +928,7 @@ func _commit_profile(candidate: Dictionary) -> bool:
 		return false
 
 	_profile = normalized
+	_skill_effect_values.clear()
 	profile_changed.emit(get_profile_data())
 	return true
 
@@ -254,6 +937,9 @@ func _create_default_profile() -> Dictionary:
 	return {
 		"schema_version": CURRENT_SCHEMA_VERSION,
 		"essence": 0,
+		"crystal_shop_purchase_count": 0,
+		"essence_points": 0,
+		"essence_threshold": FIRST_ESSENCE_THRESHOLD,
 		"crystals": [],
 		"unlocked_crystal_ids": [],
 		"purchased_skill_nodes": {
@@ -304,6 +990,7 @@ func _parse_profile_text(text: String, source: String) -> Dictionary:
 
 func _normalize_profile(raw: Dictionary) -> Dictionary:
 	_last_parse_error = ""
+	_profile_requires_migration_save = false
 	if (
 		not raw.has("schema_version")
 		or not _is_integer_number(raw["schema_version"])
@@ -321,6 +1008,8 @@ func _normalize_profile(raw: Dictionary) -> Dictionary:
 			% [schema_version, CURRENT_SCHEMA_VERSION]
 		)
 		return {}
+	var migrated_legacy_fire_mastery_schema := schema_version < 3
+	_profile_requires_migration_save = schema_version < CURRENT_SCHEMA_VERSION
 
 	var migrated := raw.duplicate(true)
 	while schema_version < CURRENT_SCHEMA_VERSION:
@@ -328,6 +1017,15 @@ func _normalize_profile(raw: Dictionary) -> Dictionary:
 			0:
 				migrated = _migrate_v0_to_v1(migrated)
 				schema_version = 1
+			1:
+				migrated = _migrate_v1_to_v2(migrated)
+				schema_version = 2
+			2:
+				migrated = _migrate_v2_to_v3(migrated)
+				schema_version = 3
+			3:
+				migrated = _migrate_v3_to_v4(migrated)
+				schema_version = 4
 			_:
 				_last_parse_error = "No migration exists from schema version %d." % schema_version
 				return {}
@@ -340,6 +1038,48 @@ func _normalize_profile(raw: Dictionary) -> Dictionary:
 	var essence_value := int(migrated["essence"])
 	if essence_value < 0 or essence_value > MAX_ESSENCE:
 		_last_parse_error = "essence is outside the supported balance limits."
+		return {}
+
+	if not migrated.has("crystal_shop_purchase_count"):
+		migrated["crystal_shop_purchase_count"] = 0
+		_profile_requires_migration_save = true
+	if not _is_integer_number(migrated["crystal_shop_purchase_count"]):
+		_last_parse_error = "crystal_shop_purchase_count must be an integer."
+		return {}
+	var crystal_shop_purchase_count := int(
+		migrated["crystal_shop_purchase_count"]
+	)
+	if (
+		crystal_shop_purchase_count < 0
+		or crystal_shop_purchase_count > MAX_CRYSTAL_SHOP_PURCHASES
+	):
+		_last_parse_error = (
+			"crystal_shop_purchase_count is outside the supported limits."
+		)
+		return {}
+
+	# Profiles saved before the Essence point system have neither field.
+	if not migrated.has("essence_threshold"):
+		migrated["essence_threshold"] = FIRST_ESSENCE_THRESHOLD
+	if not migrated.has("essence_points"):
+		migrated["essence_points"] = 0
+	if (
+		not _is_integer_number(migrated["essence_threshold"])
+		or not _is_integer_number(migrated["essence_points"])
+	):
+		_last_parse_error = "essence_points and essence_threshold must be integers."
+		return {}
+	var essence_threshold_value := int(migrated["essence_threshold"])
+	var essence_points_value := int(migrated["essence_points"])
+	if (
+		essence_threshold_value < FIRST_ESSENCE_THRESHOLD
+		or essence_threshold_value > MAX_ESSENCE_THRESHOLD
+		or essence_points_value < 0
+		or essence_points_value >= essence_threshold_value
+	):
+		_last_parse_error = (
+			"essence_points must be between 0 and the current essence_threshold."
+		)
 		return {}
 
 	if not migrated.has("crystals"):
@@ -384,9 +1124,163 @@ func _normalize_profile(raw: Dictionary) -> Dictionary:
 	if not _last_parse_error.is_empty():
 		return {}
 
+	var owns_awakening_magic: bool = (
+		skill_nodes["tower_enhancements"].has("A")
+	)
+	if not owns_awakening_magic:
+		if not crystals.is_empty() or not unlocked_ids.is_empty():
+			_profile_requires_migration_save = true
+		crystals = []
+		unlocked_ids = []
+	elif not reward_claims.has(AWAKENING_RAPID_FIRE_REWARD_CLAIM):
+		var reward_profile := {
+			"crystals": crystals,
+			"unlocked_crystal_ids": unlocked_ids,
+			"reward_claims": reward_claims
+		}
+		if not _grant_awakening_rapid_fire_crystal(reward_profile):
+			return {}
+		crystals = reward_profile["crystals"]
+		unlocked_ids = reward_profile["unlocked_crystal_ids"]
+		reward_claims = reward_profile["reward_claims"]
+		_profile_requires_migration_save = true
+
+	if owns_awakening_magic:
+		if not reward_claims.has(AWAKENING_KINETIC_REWARD_CLAIM):
+			var reward_profile := {
+				"crystals": crystals,
+				"unlocked_crystal_ids": unlocked_ids,
+				"reward_claims": reward_claims
+			}
+			if not _grant_awakening_kinetic_crystal(reward_profile):
+				return {}
+			crystals = reward_profile["crystals"]
+			unlocked_ids = reward_profile["unlocked_crystal_ids"]
+			reward_claims = reward_profile["reward_claims"]
+			_profile_requires_migration_save = true
+		elif not unlocked_ids.has("kinetic"):
+			if unlocked_ids.size() >= MAX_UNLOCKED_CRYSTALS:
+				_last_parse_error = (
+					"unlocked_crystal_ids exceeds the supported collection limit."
+				)
+				return {}
+			unlocked_ids.append("kinetic")
+			_profile_requires_migration_save = true
+
+		if migrated_legacy_fire_mastery_schema:
+			var elemental_skills: Array = skill_nodes["elemental_mastery"]
+			var had_legacy_fire_mastery := (
+				elemental_skills.has("D") or elemental_skills.has("I")
+			)
+			if had_legacy_fire_mastery:
+				if elemental_skills.has("D") and not elemental_skills.has("I"):
+					elemental_skills.append("I")
+					skill_nodes["elemental_mastery"] = elemental_skills
+				var legacy_fire_reward_claim := "skill_crystal_reward_D"
+				var fire_mastery_reward_claim := "skill_crystal_reward_I"
+				var legacy_reward_was_claimed := reward_claims.has(
+					legacy_fire_reward_claim
+				)
+				var already_owns_fire := false
+				for crystal_entry in crystals:
+					if (
+						crystal_entry["crystal_id"] == "fire"
+						and int(crystal_entry["level"]) == 1
+					):
+						already_owns_fire = true
+						break
+				if (
+					not legacy_reward_was_claimed
+					and not reward_claims.has(fire_mastery_reward_claim)
+					and not already_owns_fire
+				):
+					var reward_profile := {
+						"crystals": crystals,
+						"unlocked_crystal_ids": unlocked_ids,
+						"reward_claims": reward_claims
+					}
+					if not _grant_skill_crystal_reward(
+						reward_profile,
+						"fire",
+						fire_mastery_reward_claim
+					):
+						return {}
+					crystals = reward_profile["crystals"]
+					unlocked_ids = reward_profile["unlocked_crystal_ids"]
+					reward_claims = reward_profile["reward_claims"]
+				elif not unlocked_ids.has("fire"):
+					if unlocked_ids.size() >= MAX_UNLOCKED_CRYSTALS:
+						_last_parse_error = (
+							"unlocked_crystal_ids exceeds the supported collection limit."
+						)
+						return {}
+					unlocked_ids.append("fire")
+				if not reward_claims.has(fire_mastery_reward_claim):
+					if reward_claims.size() >= MAX_REWARD_CLAIMS:
+						_last_parse_error = (
+							"reward_claims exceeds the supported collection limit."
+						)
+						return {}
+					reward_claims.append(fire_mastery_reward_claim)
+				_profile_requires_migration_save = true
+
+		var skill_crystal_rewards := get_skill_crystal_rewards()
+		for skill_id in skill_crystal_rewards:
+			var definition := SKILL_CATALOG.get_skill_definition(
+				StringName(skill_id)
+			)
+			var tree_id := String(definition["category"])
+			if not skill_nodes[tree_id].has(skill_id):
+				continue
+
+			var reward_claim := "skill_crystal_reward_%s" % skill_id
+			if reward_claims.has(reward_claim):
+				continue
+			var reward_crystal_id := String(skill_crystal_rewards[skill_id])
+			var already_owns_reward_crystal := false
+			for crystal_entry in crystals:
+				if (
+					crystal_entry["crystal_id"] == reward_crystal_id
+					and int(crystal_entry["level"]) == 1
+				):
+					already_owns_reward_crystal = true
+					break
+			if already_owns_reward_crystal:
+				if not unlocked_ids.has(reward_crystal_id):
+					if unlocked_ids.size() >= MAX_UNLOCKED_CRYSTALS:
+						_last_parse_error = (
+							"unlocked_crystal_ids exceeds the supported collection limit."
+						)
+						return {}
+					unlocked_ids.append(reward_crystal_id)
+				if reward_claims.size() >= MAX_REWARD_CLAIMS:
+					_last_parse_error = "reward_claims exceeds the supported collection limit."
+					return {}
+				reward_claims.append(reward_claim)
+				_profile_requires_migration_save = true
+				continue
+			var reward_profile := {
+				"crystals": crystals,
+				"unlocked_crystal_ids": unlocked_ids,
+				"reward_claims": reward_claims
+			}
+			if not _grant_skill_crystal_reward(
+				reward_profile,
+				reward_crystal_id,
+				reward_claim
+			):
+				return {}
+			crystals = reward_profile["crystals"]
+			unlocked_ids = reward_profile["unlocked_crystal_ids"]
+			reward_claims = reward_profile["reward_claims"]
+			_profile_requires_migration_save = true
+
 	return {
 		"schema_version": CURRENT_SCHEMA_VERSION,
 		"essence": essence_value,
+		"crystal_shop_purchase_count": crystal_shop_purchase_count,
+		"essence_points": essence_points_value,
+		"essence_threshold": essence_threshold_value,
 		"crystals": crystals,
 		"unlocked_crystal_ids": unlocked_ids,
 		"purchased_skill_nodes": skill_nodes,
@@ -399,6 +1293,155 @@ func _migrate_v0_to_v1(data: Dictionary) -> Dictionary:
 	var migrated := data.duplicate(true)
 	migrated["schema_version"] = 1
 	return migrated
+
+
+func _migrate_v1_to_v2(data: Dictionary) -> Dictionary:
+	var migrated := data.duplicate(true)
+	migrated["schema_version"] = 2
+	return migrated
+
+
+func _migrate_v2_to_v3(data: Dictionary) -> Dictionary:
+	var migrated := data.duplicate(true)
+	migrated["schema_version"] = 3
+	return migrated
+
+
+func _migrate_v3_to_v4(data: Dictionary) -> Dictionary:
+	var migrated := data.duplicate(true)
+	migrated["schema_version"] = 4
+	return migrated
+
+
+func _grant_awakening_rapid_fire_crystal(candidate: Dictionary) -> bool:
+	var crystals: Array = candidate["crystals"]
+	var has_level_one_rapid_fire := false
+	for entry in crystals:
+		if entry["crystal_id"] == "rapid_fire" and int(entry["level"]) == 1:
+			has_level_one_rapid_fire = true
+			break
+	if not has_level_one_rapid_fire:
+		if crystals.size() >= MAX_CRYSTAL_ENTRIES:
+			_last_parse_error = "Crystal inventory has reached the supported entry limit."
+			return false
+		crystals.append({
+			"crystal_id": "rapid_fire",
+			"level": 1,
+			"quantity": 1
+		})
+	candidate["crystals"] = crystals
+
+	var unlocked_ids: Array = candidate["unlocked_crystal_ids"]
+	if not unlocked_ids.has("rapid_fire"):
+		unlocked_ids.append("rapid_fire")
+	candidate["unlocked_crystal_ids"] = unlocked_ids
+
+	var reward_claims: Array = candidate["reward_claims"]
+	if not reward_claims.has(AWAKENING_RAPID_FIRE_REWARD_CLAIM):
+		if reward_claims.size() >= MAX_REWARD_CLAIMS:
+			_last_parse_error = "reward_claims exceeds the supported collection limit."
+			return false
+		reward_claims.append(AWAKENING_RAPID_FIRE_REWARD_CLAIM)
+	candidate["reward_claims"] = reward_claims
+	return true
+
+
+func _grant_awakening_kinetic_crystal(candidate: Dictionary) -> bool:
+	var crystals: Array = candidate["crystals"]
+	var has_level_one_kinetic := false
+	for entry in crystals:
+		if entry["crystal_id"] == "kinetic" and int(entry["level"]) == 1:
+			has_level_one_kinetic = true
+			break
+	if not has_level_one_kinetic:
+		if crystals.size() >= MAX_CRYSTAL_ENTRIES:
+			_last_parse_error = "Crystal inventory has reached the supported entry limit."
+			return false
+		crystals.append({
+			"crystal_id": "kinetic",
+			"level": 1,
+			"quantity": 1
+		})
+	candidate["crystals"] = crystals
+
+	var unlocked_ids: Array = candidate["unlocked_crystal_ids"]
+	if not unlocked_ids.has("kinetic"):
+		if unlocked_ids.size() >= MAX_UNLOCKED_CRYSTALS:
+			_last_parse_error = (
+				"unlocked_crystal_ids exceeds the supported collection limit."
+			)
+			return false
+		unlocked_ids.append("kinetic")
+	candidate["unlocked_crystal_ids"] = unlocked_ids
+
+	var reward_claims: Array = candidate["reward_claims"]
+	if not reward_claims.has(AWAKENING_KINETIC_REWARD_CLAIM):
+		if reward_claims.size() >= MAX_REWARD_CLAIMS:
+			_last_parse_error = "reward_claims exceeds the supported collection limit."
+			return false
+		reward_claims.append(AWAKENING_KINETIC_REWARD_CLAIM)
+	candidate["reward_claims"] = reward_claims
+	return true
+
+
+func _grant_skill_crystal_reward(
+	candidate: Dictionary,
+	crystal_id: String,
+	reward_claim: String
+) -> bool:
+	if not CRYSTAL_CATALOG.has(crystal_id):
+		_last_parse_error = "Unknown skill reward crystal ID '%s'." % crystal_id
+		return false
+
+	var crystals: Array = candidate["crystals"]
+	var found_index := -1
+	for index in range(crystals.size()):
+		var entry: Dictionary = crystals[index]
+		if entry["crystal_id"] == crystal_id and int(entry["level"]) == 1:
+			found_index = index
+			break
+
+	if found_index >= 0:
+		var entry: Dictionary = crystals[found_index]
+		if int(entry["quantity"]) >= MAX_CRYSTAL_QUANTITY:
+			_last_parse_error = "Skill reward would exceed the crystal quantity limit."
+			return false
+		entry["quantity"] = int(entry["quantity"]) + 1
+		crystals[found_index] = entry
+	elif crystals.size() >= MAX_CRYSTAL_ENTRIES:
+		_last_parse_error = "Crystal inventory has reached the supported entry limit."
+		return false
+	else:
+		crystals.append({
+			"crystal_id": crystal_id,
+			"level": 1,
+			"quantity": 1
+		})
+
+	var unlocked_ids: Array = candidate["unlocked_crystal_ids"]
+	if not unlocked_ids.has(crystal_id):
+		unlocked_ids.append(crystal_id)
+	candidate["crystals"] = crystals
+	candidate["unlocked_crystal_ids"] = unlocked_ids
+
+	var reward_claims: Array = candidate["reward_claims"]
+	if reward_claims.has(reward_claim):
+		return true
+	if reward_claims.size() >= MAX_REWARD_CLAIMS:
+		_last_parse_error = "reward_claims exceeds the supported collection limit."
+		return false
+	reward_claims.append(reward_claim)
+	candidate["reward_claims"] = reward_claims
+	return true
+
+
+# A claim alone is not proof of ownership: a reset or edited save can leave the
+# claim behind without the crystal, which would block re-granting forever.
+func _owns_crystal_any_level(crystal_id: String) -> bool:
+	for entry in _profile.get("crystals", []):
+		if entry["crystal_id"] == crystal_id and int(entry["quantity"]) > 0:
+			return true
+	return false
 
 
 func _normalize_crystal_entries(raw_entries: Array) -> Array:

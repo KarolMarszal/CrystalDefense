@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="CrystalData" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://crystals/CrystalData.gd" id="1_data"]
+[ext_resource type="Script" path="res://crystals/CrystalUpgradeMapping.gd" id="2_mapping"]
+
+[sub_resource type="Resource" id="Upgrade1Damage"]
+script = ExtResource("2_mapping")
+tower_upgrade_slot = 0
+display_name = "Damage"
+affected_stat = 0
+operation = 1
+amount = 1.2
+
+[sub_resource type="Resource" id="Upgrade2AttackSpeed"]
+script = ExtResource("2_mapping")
+tower_upgrade_slot = 1
+display_name = "Attack Speed"
+affected_stat = 1
+operation = 1
+amount = 1.2
+
+[sub_resource type="Resource" id="Upgrade3Range"]
+script = ExtResource("2_mapping")
+tower_upgrade_slot = 2
+display_name = "Range"
+affected_stat = 2
+operation = 1
+amount = 1.2
+
+[resource]
+script = ExtResource("1_data")
+crystal_id = &"kinetic"
+display_name = "Kinetic Crystal"
+damage = 22
+attack_speed = 1.0
+attack_range = 180.0
+attack_behavior = 0
+crystal_level_growth = 1.1
+tower_upgrade_mappings = Array[ExtResource("2_mapping")]([SubResource("Upgrade1Damage"), SubResource("Upgrade2AttackSpeed"), SubResource("Upgrade3Range")])
