@@ -3,10 +3,14 @@ extends Control
 const GAME_SCENE_PATH: String = "res://game/Game.tscn"
 const INVENTORY_SCENE_PATH: String = "res://ui/main_menu/CrystalInventory.tscn"
 const SKILL_TREE_SCENE_PATH: String = "res://ui/SkillTreeScreen.tscn"
+const ACHIEVEMENTS_SCENE_PATH: String = "res://ui/main_menu/AchievementsScreen.tscn"
+const PROFILE_SCENE_PATH: String = "res://ui/main_menu/ProfileCustomizationScreen.tscn"
 
 @onready var start_button: Button = $CenterPanel/MarginContainer/MenuContents/StartButton
 @onready var inventory_button: Button = $CenterPanel/MarginContainer/MenuContents/InventoryButton
 @onready var skill_tree_button: Button = $CenterPanel/MarginContainer/MenuContents/SkillTreeButton
+@onready var achievements_button: Button = $CenterPanel/MarginContainer/MenuContents/AchievementsButton
+@onready var profile_button: Button = $CenterPanel/MarginContainer/MenuContents/ProfileButton
 @onready var reset_skills_button: Button = $CenterPanel/MarginContainer/MenuContents/ResetSkillsButton
 @onready var quit_button: Button = $CenterPanel/MarginContainer/MenuContents/QuitButton
 @onready var reset_confirmation: ConfirmationDialog = $ResetSkillsConfirmation
@@ -18,6 +22,8 @@ func _ready() -> void:
 	start_button.pressed.connect(_open_game)
 	inventory_button.pressed.connect(_open_inventory)
 	skill_tree_button.pressed.connect(_open_skill_tree)
+	achievements_button.pressed.connect(_open_achievements)
+	profile_button.pressed.connect(_open_profile)
 	reset_skills_button.pressed.connect(_confirm_reset_skills)
 	reset_confirmation.confirmed.connect(_reset_skills)
 	quit_button.pressed.connect(_quit_game)
@@ -48,6 +54,14 @@ func _open_inventory() -> void:
 
 func _open_skill_tree() -> void:
 	_change_scene(SKILL_TREE_SCENE_PATH)
+
+
+func _open_achievements() -> void:
+	_change_scene(ACHIEVEMENTS_SCENE_PATH)
+
+
+func _open_profile() -> void:
+	_change_scene(PROFILE_SCENE_PATH)
 
 
 func _confirm_reset_skills() -> void:

@@ -19,6 +19,8 @@ config/icon="res://assets/icon.svg"
 
 GoldManager="*res://managers/gold_manager.gd"
 CrystalInventory="*res://managers/CrystalInventoryManager.gd"
+AchievementManager="*res://managers/AchievementManager.gd"
+AchievementNotificationHost="*res://ui/AchievementNotificationHost.gd"
 GameSpeedManager="*res://managers/GameSpeedManager.gd"
 
 [display]

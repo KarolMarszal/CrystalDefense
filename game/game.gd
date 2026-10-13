@@ -45,6 +45,7 @@ var _passive_gold_timer: Timer
 func _ready() -> void:
 	_draw_enemy_path()
 	build_button.text = "BUILD (%d GOLD)" % BuildSlot.CONSTRUCTION_PRICE
+	AchievementManager.begin_run()
 	GameSpeedManager.begin_run()
 	GoldManager.start_new_run()
 	CrystalInventory.start_run_inventory()
@@ -127,6 +128,7 @@ func _close_crystal_inventory() -> void:
 
 
 func _exit_tree() -> void:
+	AchievementManager.end_run()
 	if is_instance_valid(_passive_gold_timer):
 		_passive_gold_timer.stop()
 	if CrystalInventory.profile_changed.is_connected(_on_profile_changed):
@@ -166,6 +168,7 @@ func _finish_run() -> void:
 		return
 
 	run_finished = true
+	AchievementManager.end_run()
 	_update_speed_controls()
 	if is_instance_valid(_passive_gold_timer):
 		_passive_gold_timer.stop()
@@ -273,6 +276,7 @@ func _leave_run(scene_path: String) -> void:
 		return
 
 	_transitioning = true
+	AchievementManager.end_run()
 	if is_instance_valid(_passive_gold_timer):
 		_passive_gold_timer.stop()
 	wave_manager.stop_spawning()

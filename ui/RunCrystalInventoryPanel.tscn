@@ -59,12 +59,45 @@ text = "X"
 layout_mode = 2
 theme_override_colors/font_color = Color(0.83, 0.83, 0.76, 1)
 theme_override_font_sizes/font_size = 12
-text = "Drag a crystal onto a tower on the map or its selected panel socket."
+text = "Drag a crystal onto a tower socket. Installed crystals are not available to fuse."
 autowrap_mode = 2
+
+[node name="FusionStatus" type="Label" parent="Margin/Contents"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.83, 0.83, 0.76, 1)
+theme_override_font_sizes/font_size = 12
+text = ""
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="FusionPreview" type="Label" parent="Margin/Contents"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.83, 0.83, 0.76, 1)
+theme_override_font_sizes/font_size = 12
+text = "Select two matching crystals."
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="FusionActions" type="HBoxContainer" parent="Margin/Contents"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 8
+
+[node name="FuseButton" type="Button" parent="Margin/Contents/FusionActions"]
+custom_minimum_size = Vector2(170, 36)
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "FUSE"
+
+[node name="ClearSelectionButton" type="Button" parent="Margin/Contents/FusionActions"]
+custom_minimum_size = Vector2(80, 36)
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "CLEAR"
 
 [node name="EmptyLabel" type="Label" parent="Margin/Contents"]
 visible = false
-custom_minimum_size = Vector2(0, 120)
+custom_minimum_size = Vector2(0, 72)
 layout_mode = 2
 theme_override_colors/font_color = Color(0.83, 0.83, 0.76, 1)
 theme_override_font_sizes/font_size = 16

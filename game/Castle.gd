@@ -42,7 +42,10 @@ func get_treasury_count() -> int:
 	return count
 
 
-func register_permanent_trophy_loss(trophy_id: StringName) -> void:
+func register_permanent_trophy_loss(
+	trophy_id: StringName,
+	wave_number: int = 0
+) -> void:
 	if trophy_id.is_empty() or _permanently_lost_trophy_ids.has(trophy_id):
 		return
 	if permanently_lost_trophies >= get_total_trophy_count():
@@ -50,6 +53,7 @@ func register_permanent_trophy_loss(trophy_id: StringName) -> void:
 
 	_permanently_lost_trophy_ids[trophy_id] = true
 	permanently_lost_trophies += 1
+	AchievementManager.report_trophy_delivered(trophy_id, wave_number)
 	remaining_trophies_changed.emit(get_remaining_trophy_count(), get_total_trophy_count())
 
 

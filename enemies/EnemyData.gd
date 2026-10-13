@@ -20,3 +20,4 @@ extends Resource
 @export_range(0.0, 1.0, 0.001) var regeneration_percent_max_hp_per_second: float = 0.0
 @export var can_carry_trophy: bool = true
 @export var can_pickup_dropped_trophy: bool = false
+@export var is_summon: bool = false

@@ -75,6 +75,38 @@ theme_override_font_sizes/font_size = 14
 text = ""
 horizontal_alignment = 1
 
+[node name="FusionStatus" type="Label" parent="CenterPanel/MarginContainer/Contents"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = ""
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="FusionPreview" type="Label" parent="CenterPanel/MarginContainer/Contents"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.83, 0.83, 0.76, 1)
+theme_override_font_sizes/font_size = 13
+text = "Select two matching crystals to preview fusion."
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="FusionActions" type="HBoxContainer" parent="CenterPanel/MarginContainer/Contents"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 10
+
+[node name="FuseButton" type="Button" parent="CenterPanel/MarginContainer/Contents/FusionActions"]
+custom_minimum_size = Vector2(210, 40)
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "FUSE CRYSTALS"
+
+[node name="ClearSelectionButton" type="Button" parent="CenterPanel/MarginContainer/Contents/FusionActions"]
+custom_minimum_size = Vector2(140, 40)
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "CLEAR"
+
 [node name="EmptyLabel" type="Label" parent="CenterPanel/MarginContainer/Contents"]
 layout_mode = 2
 size_flags_vertical = 3

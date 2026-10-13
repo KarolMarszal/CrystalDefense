@@ -62,3 +62,9 @@ theme_override_font_sizes/font_size = 20
 text = "x1"
 horizontal_alignment = 2
 vertical_alignment = 1
+
+[node name="SelectFusionButton" type="Button" parent="Margin/Contents"]
+custom_minimum_size = Vector2(74, 36)
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "SELECT"

@@ -187,6 +187,8 @@ func _get_effect_description(definition: Dictionary) -> String:
 			return "Effect: grants one Fire Crystal and immediately enables its area-damage hit."
 		"fire_damage_bonus":
 			return "Effect: increases Fire Crystal damage by 20%."
+		"unlock_crystal_fusion":
+			return "Effect: enables permanent and in-run fusion of two identical crystals into one crystal at the next level."
 	var unlock_crystal_id := String(definition["unlock_crystal_id"])
 	if not unlock_crystal_id.is_empty():
 		return (

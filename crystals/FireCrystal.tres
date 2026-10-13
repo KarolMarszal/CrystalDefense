@@ -37,5 +37,5 @@ damage = 12.0
 attack_speed = 1.0
 attack_range = 180.0
 attack_behavior = 0
-crystal_level_growth = 1.1
+crystal_level_growth = 2.0
 tower_upgrade_mappings = Array[ExtResource("2_mapping")]([SubResource("Upgrade1Damage"), SubResource("Upgrade2AttackSpeed"), SubResource("Upgrade3Range")])

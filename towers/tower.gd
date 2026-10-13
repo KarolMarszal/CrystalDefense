@@ -311,6 +311,7 @@ func upgrade_tower_track(track: UpgradeTrack) -> bool:
 
 	queue_redraw()
 	stats_changed.emit()
+	AchievementManager.report_tower_upgrade_completed()
 	return true
 
 

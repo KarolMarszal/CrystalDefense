@@ -17,7 +17,7 @@ enum AttackBehavior {
 @export var attack_speed: float = 0.0
 @export var attack_range: float = 180.0
 @export var attack_behavior: AttackBehavior = AttackBehavior.PROJECTILE
-@export_range(1.0, 10.0, 0.01) var crystal_level_growth: float = 1.1
+@export_range(1.0, 10.0, 0.01) var crystal_level_growth: float = 2.0
 @export_range(0.0, 1.0, 0.01) var slow_fraction: float = 0.0
 @export var slow_duration: float = 0.0
 @export_range(0.0, 1.0, 0.001) var bleed_max_hp_fraction_per_second: float = 0.0
@@ -63,6 +63,8 @@ func create_attack_configuration(
 		)
 
 	_apply_skill_modifiers(configuration)
+	configuration.area_damage_fraction *= level_scale
+	configuration.area_damage_radius *= level_scale
 	return configuration
 
 

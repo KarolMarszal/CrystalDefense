@@ -720,7 +720,7 @@ func _complete_trophy_deposit(trophy: Trophy) -> void:
 		return
 
 	carried_trophies.erase(trophy)
-	castle.register_permanent_trophy_loss(trophy.trophy_id)
+	castle.register_permanent_trophy_loss(trophy.trophy_id, wave_number)
 	_on_trophy_permanently_lost(trophy)
 	_deposit_carried_trophies()
 

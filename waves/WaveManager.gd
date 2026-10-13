@@ -141,6 +141,7 @@ func start_wave(reason: StartReason) -> void:
 	next_wave_number += 1
 	next_wave_changed.emit(next_wave_number)
 	active_waves_changed.emit()
+	AchievementManager.report_wave_started(wave.wave_number)
 
 	_spawn_scheduled_bosses(wave)
 	_spawn_next_enemy(wave)
@@ -865,6 +866,10 @@ func _is_summon_position_clear(
 func _register_wave_enemy(wave: ActiveWave, enemy: Enemy) -> void:
 	var enemy_id := enemy.get_instance_id()
 	wave.active_enemies[enemy_id] = enemy
+	enemy.final_death.connect(
+		_on_enemy_final_death.bind(enemy),
+		CONNECT_ONE_SHOT
+	)
 	enemy.became_inactive.connect(
 		_on_enemy_became_inactive.bind(wave, enemy_id, enemy),
 		CONNECT_ONE_SHOT
@@ -873,6 +878,44 @@ func _register_wave_enemy(wave: ActiveWave, enemy: Enemy) -> void:
 		_on_enemy_inactive.bind(wave, enemy_id),
 		CONNECT_ONE_SHOT
 	)
+
+
+func _on_enemy_final_death(enemy: Enemy) -> void:
+	var boss := enemy as BossEnemy
+	if boss != null:
+		if boss.boss_data == null:
+			push_error("Defeated Boss has no BossData for achievement tracking.")
+			return
+		var boss_tier := _get_boss_tier(boss.boss_data)
+		AchievementManager.report_enemy_killed(
+			boss.boss_data.boss_id,
+			true,
+			false,
+			boss_tier
+		)
+		AchievementManager.report_boss_defeated(
+			boss.boss_data.boss_id,
+			boss_tier,
+			boss.wave_number
+		)
+		return
+
+	if enemy.enemy_data == null:
+		push_error("Defeated Enemy has no EnemyData for achievement tracking.")
+		return
+	AchievementManager.report_enemy_killed(
+		enemy.enemy_data.enemy_id,
+		false,
+		not enemy.is_planned_wave_enemy or enemy.enemy_data.is_summon
+	)
+
+
+func _get_boss_tier(boss_data: BossData) -> int:
+	for tier in range(1, 4):
+		for scheduled_boss in BOSS_WAVE_SCHEDULE.get_boss_pool(tier):
+			if scheduled_boss != null and scheduled_boss.boss_id == boss_data.boss_id:
+				return tier
+	return 0
 
 
 func _spawn_next_enemy(wave: ActiveWave) -> void:
@@ -1060,6 +1103,15 @@ func _try_complete_wave(wave: ActiveWave) -> void:
 	active_waves.erase(wave)
 	completed_wave_numbers.append(wave.wave_number)
 	wave_completed.emit(wave.wave_number)
+	var castle := get_node_or_null(castle_node_path) as Castle
+	if castle == null:
+		push_error("Wave completion could not read the Castle trophy state.")
+	else:
+		AchievementManager.report_wave_completed(
+			wave.wave_number,
+			castle.get_remaining_trophy_count(),
+			castle.get_total_trophy_count()
+		)
 	active_waves_changed.emit()
 	if auto_waves_enabled:
 		_schedule_automatic_start(wave.wave_number + 1)

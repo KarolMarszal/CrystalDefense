@@ -18,3 +18,4 @@ unlock_wave = 11
 selection_weight = 0.0
 can_carry_trophy = false
 can_pickup_dropped_trophy = false
+is_summon = true

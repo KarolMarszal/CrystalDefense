@@ -4,6 +4,7 @@ signal profile_changed(profile: Dictionary)
 signal save_status_changed(success: bool, message: String)
 signal run_inventory_changed
 signal essence_awarded(amount: int)
+signal essence_earned(amount: int)
 
 const CURRENT_SCHEMA_VERSION: int = 4
 const MAX_ESSENCE: int = 9007199254740991
@@ -14,6 +15,7 @@ const MAX_CRYSTAL_SHOP_PURCHASES: int = MAX_ESSENCE
 const MAX_CRYSTAL_SHOP_PRICE: int = 100
 const MAX_CRYSTAL_ENTRIES: int = 100
 const MAX_CRYSTAL_LEVEL: int = 10000
+const CRYSTAL_FUSION_SKILL_ID: StringName = &"crystal_fusion"
 const MAX_CRYSTAL_QUANTITY: int = 1000000
 const MAX_UNLOCKED_CRYSTALS: int = 100
 const MAX_SKILL_NODES_PER_TREE: int = 1000
@@ -252,7 +254,10 @@ func purchase_random_crystal() -> bool:
 	candidate["crystal_shop_purchase_count"] = purchase_count + 1
 	if not _add_crystal_to_profile(candidate, String(selected_id), 1, 1):
 		return false
-	return _commit_profile(candidate)
+	if not _commit_profile(candidate):
+		return false
+	AchievementManager.report_crystal_purchased(selected_id)
+	return true
 
 
 # Each threshold is the previous one plus 5%, rounded up. Integer math avoids
@@ -337,6 +342,99 @@ func add_crystal(
 	return _commit_profile(candidate)
 
 
+func is_crystal_fusion_unlocked() -> bool:
+	return is_skill_purchased(CRYSTAL_FUSION_SKILL_ID)
+
+
+func can_fuse_crystals(crystal_id: StringName, level: int) -> bool:
+	if not is_crystal_fusion_unlocked():
+		return false
+	if not _is_valid_fusion_input(crystal_id, level):
+		return false
+
+	if _run_inventory_active:
+		var input_key := _get_run_crystal_key(crystal_id, level)
+		var run_input_entry: Dictionary = _run_crystals.get(input_key, {})
+		if int(run_input_entry.get("quantity", 0)) < 2:
+			return false
+		var run_output_level := level + 1
+		if not _has_finite_crystal_level_stats(crystal_id, run_output_level):
+			return false
+		var output_key := _get_run_crystal_key(crystal_id, run_output_level)
+		var run_output_entry: Dictionary = _run_crystals.get(output_key, {})
+		if int(run_output_entry.get("quantity", 0)) >= MAX_CRYSTAL_QUANTITY:
+			return false
+		var run_resulting_entry_count := _run_crystals.size()
+		if int(run_input_entry["quantity"]) == 2:
+			run_resulting_entry_count -= 1
+		if run_output_entry.is_empty():
+			run_resulting_entry_count += 1
+		if run_resulting_entry_count > MAX_CRYSTAL_ENTRIES:
+			return false
+		return true
+
+	var entries: Array = _profile.get("crystals", [])
+	var owned_input_entry := _find_profile_crystal_entry(
+		entries,
+		String(crystal_id),
+		level
+	)
+	if owned_input_entry.is_empty() or int(owned_input_entry["quantity"]) < 2:
+		return false
+	var owned_output_level := level + 1
+	if not _has_finite_crystal_level_stats(crystal_id, owned_output_level):
+		return false
+	var owned_output_entry := _find_profile_crystal_entry(
+		entries,
+		String(crystal_id),
+		owned_output_level
+	)
+	if not owned_output_entry.is_empty():
+		return int(owned_output_entry["quantity"]) < MAX_CRYSTAL_QUANTITY
+	var owned_resulting_entry_count := entries.size()
+	if int(owned_input_entry["quantity"]) == 2:
+		owned_resulting_entry_count -= 1
+	owned_resulting_entry_count += 1
+	return owned_resulting_entry_count <= MAX_CRYSTAL_ENTRIES
+
+
+func fuse_crystals(crystal_id: StringName, level: int) -> bool:
+	if not can_fuse_crystals(crystal_id, level):
+		return false
+
+	var output_level := level + 1
+	if _run_inventory_active:
+		var candidate := _run_crystals.duplicate(true)
+		_adjust_run_crystal_quantity(candidate, crystal_id, level, -2)
+		_adjust_run_crystal_quantity(candidate, crystal_id, output_level, 1)
+		if candidate.size() > MAX_CRYSTAL_ENTRIES:
+			return false
+		_run_crystals = candidate
+		run_inventory_changed.emit()
+	else:
+		var candidate_profile := _profile.duplicate(true)
+		var crystals: Array = candidate_profile["crystals"]
+		if not _adjust_profile_crystal_quantity(
+			crystals,
+			String(crystal_id),
+			level,
+			-2
+		):
+			return false
+		if not _add_crystal_to_profile(
+			candidate_profile,
+			String(crystal_id),
+			output_level,
+			1
+		):
+			return false
+		if not _commit_profile(candidate_profile):
+			return false
+
+	AchievementManager.report_crystal_fusion_completed()
+	return true
+
+
 func _add_crystal_to_profile(
 	candidate: Dictionary,
 	crystal_id: String,
@@ -370,6 +468,86 @@ func _add_crystal_to_profile(
 
 	candidate["crystals"] = entries
 	return true
+
+
+func _is_valid_fusion_input(crystal_id: StringName, level: int) -> bool:
+	return (
+		level >= 1
+		and level < MAX_CRYSTAL_LEVEL
+		and CRYSTAL_CATALOG.has(String(crystal_id))
+		and is_crystal_unlocked(crystal_id)
+	)
+
+
+func _has_finite_crystal_level_stats(
+	crystal_id: StringName,
+	level: int
+) -> bool:
+	var definition := get_crystal_definition(crystal_id)
+	if definition == null:
+		return false
+	if (
+		not is_finite(definition.crystal_level_growth)
+		or definition.crystal_level_growth <= 0.0
+	):
+		return false
+	var level_scale := pow(definition.crystal_level_growth, level - 1)
+	if not is_finite(level_scale):
+		return false
+	var base_stats: Array[float] = [
+		definition.damage,
+		definition.attack_speed,
+		definition.attack_range,
+		definition.slow_fraction,
+		definition.slow_duration,
+		definition.bleed_max_hp_fraction_per_second,
+		definition.bleed_duration,
+		CrystalData.FIRE_AREA_DAMAGE_FRACTION,
+		CrystalData.FIRE_AREA_DAMAGE_RADIUS
+	]
+	for base_stat in base_stats:
+		if not is_finite(base_stat * level_scale):
+			return false
+	return true
+
+
+func _find_profile_crystal_entry(
+	entries: Array,
+	crystal_id: String,
+	level: int
+) -> Dictionary:
+	for entry in entries:
+		if (
+			String(entry["crystal_id"]) == crystal_id
+			and int(entry["level"]) == level
+		):
+			return entry
+	return {}
+
+
+func _adjust_profile_crystal_quantity(
+	entries: Array,
+	crystal_id: String,
+	level: int,
+	delta: int
+) -> bool:
+	for index in range(entries.size()):
+		var entry: Dictionary = entries[index]
+		if (
+			String(entry["crystal_id"]) != crystal_id
+			or int(entry["level"]) != level
+		):
+			continue
+		var quantity := int(entry["quantity"]) + delta
+		if quantity < 0:
+			return false
+		if quantity == 0:
+			entries.remove_at(index)
+		else:
+			entry["quantity"] = quantity
+			entries[index] = entry
+		return true
+	return false
 
 
 func get_owned_crystals() -> Array[Dictionary]:
@@ -924,13 +1102,112 @@ func _commit_profile(candidate: Dictionary) -> bool:
 	if normalized.is_empty():
 		_set_save_status(false, "Profile update failed validation: " + _last_parse_error)
 		return false
+	var previous_essence := essence
 	if not _write_profile_file(normalized, true):
 		return false
 
 	_profile = normalized
 	_skill_effect_values.clear()
 	profile_changed.emit(get_profile_data())
+	var earned_essence := int(normalized["essence"]) - previous_essence
+	if earned_essence > 0:
+		essence_earned.emit(earned_essence)
 	return true
+
+
+func get_achievement_state() -> Dictionary:
+	var records: Dictionary = _profile.get("records", {})
+	var state: Variant = records.get("achievement_state", {})
+	if typeof(state) != TYPE_DICTIONARY:
+		return {}
+	return state.duplicate(true)
+
+
+func commit_achievement_state(
+	achievement_state: Dictionary,
+	reward_claims: Dictionary = {}
+) -> bool:
+	if not _profile_writable:
+		_set_save_status(false, "Cannot save achievement progress without a writable profile.")
+		return false
+
+	var candidate := _profile.duplicate(true)
+	var records: Dictionary = candidate["records"]
+	records["achievement_state"] = achievement_state.duplicate(true)
+	candidate["records"] = records
+
+	var claims: Array = candidate["reward_claims"]
+	var earned_reward := 0
+	for raw_claim_id in reward_claims:
+		var claim_id := String(raw_claim_id)
+		var amount: Variant = reward_claims[raw_claim_id]
+		if (
+			claim_id.is_empty()
+			or not _is_integer_number(amount)
+			or int(amount) < 0
+		):
+			_set_save_status(false, "Achievement reward claim is invalid.")
+			return false
+		if claims.has(claim_id):
+			continue
+		if claims.size() >= MAX_REWARD_CLAIMS:
+			_set_save_status(false, "Achievement reward claims exceed the supported limit.")
+			return false
+		claims.append(claim_id)
+		if earned_reward > MAX_ESSENCE - int(amount):
+			_set_save_status(false, "Achievement Essence reward exceeds the supported balance.")
+			return false
+		earned_reward += int(amount)
+
+	if int(candidate["essence"]) > MAX_ESSENCE - earned_reward:
+		_set_save_status(false, "Achievement reward would exceed the Essence balance limit.")
+		return false
+	candidate["essence"] = int(candidate["essence"]) + earned_reward
+	candidate["reward_claims"] = claims
+	return _commit_profile(candidate)
+
+
+func get_cosmetic_selections() -> Dictionary:
+	var records: Dictionary = _profile.get("records", {})
+	var selections: Variant = records.get("cosmetic_selections", {})
+	if typeof(selections) != TYPE_DICTIONARY:
+		return {}
+	return selections.duplicate(true)
+
+
+func commit_cosmetic_selections(selections: Dictionary) -> bool:
+	if not _profile_writable:
+		_set_save_status(false, "Cannot save cosmetic selections without a writable profile.")
+		return false
+
+	var candidate := _profile.duplicate(true)
+	var records: Dictionary = candidate["records"]
+	records["cosmetic_selections"] = selections.duplicate(true)
+	candidate["records"] = records
+	return _commit_profile(candidate)
+
+
+# Replaces only achievement-owned data in one save. Essence, skills, crystals
+# and non-achievement reward claims are untouched.
+func reset_achievement_data(
+	fresh_achievement_state: Dictionary,
+	remaining_selections: Dictionary
+) -> bool:
+	if not _profile_writable:
+		_set_save_status(false, "Cannot reset achievements without a writable profile.")
+		return false
+
+	var candidate := _profile.duplicate(true)
+	var records: Dictionary = candidate["records"]
+	records["achievement_state"] = fresh_achievement_state.duplicate(true)
+	records["cosmetic_selections"] = remaining_selections.duplicate(true)
+	candidate["records"] = records
+	var kept_claims: Array = []
+	for claim_id in candidate["reward_claims"]:
+		if not String(claim_id).begins_with("achievement_"):
+			kept_claims.append(claim_id)
+	candidate["reward_claims"] = kept_claims
+	return _commit_profile(candidate)
 
 
 func _create_default_profile() -> Dictionary:

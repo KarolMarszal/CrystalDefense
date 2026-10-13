@@ -1,27 +1,49 @@
 class_name RunCrystalInventoryItem
 extends PanelContainer
 
+signal fusion_input_selected(crystal_id: StringName, level: int, quantity: int)
+
 @onready var icon: TextureRect = $Margin/Contents/Icon
 @onready var name_label: Label = $Margin/Contents/Details/Name
 @onready var level_label: Label = $Margin/Contents/Details/Level
 @onready var quantity_label: Label = $Margin/Contents/Quantity
+@onready var select_fusion_button: Button = $Margin/Contents/SelectFusionButton
 
 var crystal_id: StringName
 var crystal_level: int = 1
 var crystal_quantity: int = 0
 var crystal_definition: CrystalData
+var selected_fusion_count: int = 0
+var fusion_unlocked: bool = false
+var fusion_selection_full: bool = false
 
 
-func configure(entry: Dictionary) -> void:
+func configure(
+	entry: Dictionary,
+	selected_count: int = 0,
+	can_fuse: bool = false,
+	selection_full: bool = false
+) -> void:
 	crystal_id = StringName(entry["crystal_id"])
 	crystal_level = int(entry["level"])
 	crystal_quantity = int(entry["quantity"])
 	crystal_definition = entry["definition"] as CrystalData
+	selected_fusion_count = selected_count
+	fusion_unlocked = can_fuse
+	fusion_selection_full = selection_full
 	if is_inside_tree():
 		_refresh()
 
 
 func _ready() -> void:
+	select_fusion_button.pressed.connect(
+		func() -> void:
+			fusion_input_selected.emit(
+				crystal_id,
+				crystal_level,
+				crystal_quantity
+			)
+	)
 	_refresh()
 
 
@@ -31,9 +53,20 @@ func _refresh() -> void:
 
 	icon.texture = crystal_definition.visual_texture
 	name_label.text = crystal_definition.display_name
-	level_label.hide()
+	level_label.text = "Level %d" % crystal_level
+	level_label.show()
 	quantity_label.text = "x%d" % crystal_quantity
-	tooltip_text = "Drag to a tower socket to install or replace"
+	select_fusion_button.text = (
+		"SELECTED x%d" % selected_fusion_count
+		if selected_fusion_count > 0
+		else "SELECT"
+	)
+	select_fusion_button.disabled = (
+		not fusion_unlocked
+		or selected_fusion_count >= crystal_quantity
+		or fusion_selection_full
+	)
+	tooltip_text = "Drag to install. Fusion uses only crystals not installed in towers."
 
 
 func _get_drag_data(_at_position: Vector2) -> Variant:
