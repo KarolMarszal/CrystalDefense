@@ -346,8 +346,157 @@ const COSMETIC_TYPE_NAMES: Dictionary = {
 	"enemy_skin": "Enemy Skins"
 }
 
-# Optional human-readable cosmetic names; the ID is displayed when absent.
-const COSMETIC_NAMES: Dictionary = {}
+const COSMETICS: Array[Dictionary] = [
+	{
+		"id": "", "type": "user_avatar", "name": "Wayfarer",
+		"description": "The default Crystal Defense adventurer.",
+		"texture_path": "res://cosmetics/avatars/wayfarer.svg",
+		"default": true
+	},
+	{
+		"id": "complete_bestiary_avatar", "type": "user_avatar",
+		"name": "Bestiary Keeper",
+		"description": "A field scholar's hood and crystal lens.",
+		"texture_path": "res://cosmetics/avatars/bestiary_keeper.svg",
+		"unlock_achievement": "bestiary_complete"
+	},
+	{
+		"id": "veteran_avatar", "type": "user_avatar",
+		"name": "Last Stand Veteran",
+		"description": "A battle-worn helm earned beyond the known waves.",
+		"texture_path": "res://cosmetics/avatars/veteran.svg",
+		"unlock_achievement": "endless_secret"
+	},
+	{
+		"id": "", "type": "profile_frame", "name": "Oak & Iron",
+		"description": "The default profile frame.",
+		"texture_path": "res://cosmetics/frames/oak_iron.svg",
+		"default": true
+	},
+	{
+		"id": "wave_100_frame", "type": "profile_frame",
+		"name": "Centurion Frame",
+		"description": "A gilded frame marking a century of completed waves.",
+		"texture_path": "res://cosmetics/frames/centurion.svg",
+		"unlock_achievement": "wave_100"
+	},
+	{
+		"id": "engineer_frame", "type": "profile_frame",
+		"name": "Artificer's Frame",
+		"description": "A riveted frame for a master tower engineer.",
+		"texture_path": "res://cosmetics/frames/artificer.svg",
+		"unlock_achievement": "defense_engineer"
+	},
+	{
+		"id": "", "type": "emblem", "name": "Crystal Mark",
+		"description": "The default crystal crest.",
+		"texture_path": "res://cosmetics/emblems/crystal_mark.svg",
+		"default": true
+	},
+	{
+		"id": "endless_emblem", "type": "emblem", "name": "Endless Star",
+		"description": "A star sigil for reaching the endless frontier.",
+		"texture_path": "res://cosmetics/emblems/endless_star.svg",
+		"unlock_achievement": "endless_secret"
+	},
+	{
+		"id": "untouched_emblem", "type": "emblem",
+		"name": "Untouched Sigil",
+		"description": "A shield crest earned in an untouched boss victory.",
+		"texture_path": "res://cosmetics/emblems/untouched_sigil.svg",
+		"unlock_achievement": "boss_no_loss_secret"
+	},
+	{
+		"id": "", "type": "tower_skin", "name": "Fieldstone Watch",
+		"description": "The standard fieldstone tower.",
+		"texture_path": "res://towers/visuals/tower.svg",
+		"default": true
+	},
+	{
+		"id": "tier_1_tower_skin", "type": "tower_skin",
+		"name": "Tier-One Bastion",
+		"description": "A reinforced tower with a broad defensive crown.",
+		"texture_path": "res://cosmetics/towers/bastion.svg",
+		"unlock_achievement": "all_t1_bosses"
+	},
+	{
+		"id": "engineer_tower_skin", "type": "tower_skin",
+		"name": "Artificer's Spire",
+		"description": "A precise, gear-crowned tower built for upgrades.",
+		"texture_path": "res://cosmetics/towers/artificer_spire.svg",
+		"unlock_achievement": "defense_engineer"
+	},
+	{
+		"id": "fusion_tower_skin", "type": "tower_skin",
+		"name": "Prism Spire",
+		"description": "A faceted crystal crown forged through repeated fusion.",
+		"texture_path": "res://cosmetics/towers/prism_spire.svg",
+		"unlock_achievement": "fusion_master"
+	},
+	{
+		"id": "", "type": "castle_skin", "name": "Stone Keep",
+		"description": "The default castle appearance.",
+		"texture_path": "res://cosmetics/castles/stone_keep.svg",
+		"default": true
+	},
+	{
+		"id": "vault_castle_skin", "type": "castle_skin",
+		"name": "Vault Guardian Keep",
+		"description": "A gilded crown crest for a trophy-safe defense.",
+		"texture_path": "res://cosmetics/castles/vault_keep.svg",
+		"unlock_achievement": "vault_guardian"
+	},
+	{
+		"id": "sunlit_castle_skin", "type": "castle_skin",
+		"name": "Sunspire Keep",
+		"description": "A bright pennant raised after a perfect defense.",
+		"texture_path": "res://cosmetics/castles/sunspire_keep.svg",
+		"unlock_achievement": "perfect_defense"
+	},
+	{
+		"id": "", "type": "enemy_camp_skin", "name": "Raider's Stockade",
+		"description": "The standard enemy trophy camp.",
+		"texture_path": "res://cosmetics/camps/raider_stockade.svg",
+		"default": true
+	},
+	{
+		"id": "untouched_enemy_camp_skin", "type": "enemy_camp_skin",
+		"name": "Untouched Watch",
+		"description": "A guarded camp standard earned in a clean boss victory.",
+		"texture_path": "res://cosmetics/camps/untouched_watch.svg",
+		"unlock_achievement": "boss_no_loss_secret"
+	},
+	{
+		"id": "trophy_guard_camp_skin", "type": "enemy_camp_skin",
+		"name": "Trophy Warden's Camp",
+		"description": "A trophy-marked standard earned through enemy deliveries.",
+		"texture_path": "res://cosmetics/camps/trophy_warden.svg",
+		"unlock_achievement": "trophy_escapees"
+	},
+	{
+		"id": "", "type": "enemy_skin", "name": "Wildling",
+		"description": "The ordinary enemy's default appearance.",
+		"texture_path": "res://cosmetics/enemies/wildling.svg",
+		"compatible_enemy_ids": ["goblin", "kobold", "skeleton", "orc", "troll", "spider", "spider_summon"],
+		"default": true
+	},
+	{
+		"id": "ordinary_enemy_skin", "type": "enemy_skin",
+		"name": "Ruby Raider",
+		"description": "A crimson raider mantle worn by ordinary enemies.",
+		"texture_path": "res://cosmetics/enemies/ruby_raider.svg",
+		"compatible_enemy_ids": ["goblin", "kobold", "skeleton", "orc", "troll", "spider", "spider_summon"],
+		"unlock_achievement": "battle_legend"
+	},
+	{
+		"id": "verdant_enemy_skin", "type": "enemy_skin",
+		"name": "Verdant Stalker",
+		"description": "A leaf-green mantle marked with a thorn sigil.",
+		"texture_path": "res://cosmetics/enemies/verdant_stalker.svg",
+		"compatible_enemy_ids": ["goblin", "kobold", "skeleton", "orc", "troll", "spider", "spider_summon"],
+		"unlock_achievement": "horde_terror"
+	}
+]
 
 
 static func get_category_name(category_id: String) -> String:
@@ -362,7 +511,27 @@ static func get_cosmetic_type_name(cosmetic_type: String) -> String:
 
 
 static func get_cosmetic_name(cosmetic_id: String) -> String:
-	return String(COSMETIC_NAMES.get(cosmetic_id, cosmetic_id))
+	for cosmetic in COSMETICS:
+		if String(cosmetic["id"]) == cosmetic_id:
+			return String(cosmetic["name"])
+	return cosmetic_id
+
+
+static func get_cosmetic_definition(cosmetic_id: String) -> Dictionary:
+	for cosmetic in COSMETICS:
+		if String(cosmetic["id"]) == cosmetic_id:
+			return cosmetic.duplicate(true)
+	return {}
+
+
+static func get_default_cosmetic(cosmetic_type: String) -> Dictionary:
+	for cosmetic in COSMETICS:
+		if (
+			String(cosmetic["type"]) == cosmetic_type
+			and bool(cosmetic.get("default", false))
+		):
+			return cosmetic.duplicate(true)
+	return {}
 
 
 static func get_reward_summary(definition: Dictionary) -> String:
@@ -370,12 +539,33 @@ static func get_reward_summary(definition: Dictionary) -> String:
 	var essence := int(definition.get("reward_essence", 0))
 	if essence > 0:
 		parts.append("%d Essence" % essence)
+	var cosmetics: Array[String] = []
+	var included_ids: Dictionary = {}
 	var cosmetic_id := String(definition.get("cosmetic_reward_id", ""))
 	if not cosmetic_id.is_empty():
-		parts.append("%s: %s" % [
+		cosmetics.append("%s: %s" % [
 			get_cosmetic_type_name(
 				String(definition.get("cosmetic_reward_type", ""))
 			),
 			get_cosmetic_name(cosmetic_id)
 		])
+		included_ids[cosmetic_id] = true
+	for cosmetic in COSMETICS:
+		var id := String(cosmetic["id"])
+		var source_achievement := String(
+			cosmetic.get("unlock_achievement", "")
+		)
+		if (
+			id.is_empty()
+			or included_ids.has(id)
+			or source_achievement != String(definition.get("id", ""))
+		):
+			continue
+		cosmetics.append("%s: %s" % [
+			get_cosmetic_type_name(String(cosmetic["type"])),
+			String(cosmetic["name"])
+		])
+		included_ids[id] = true
+	if not cosmetics.is_empty():
+		parts.append(", ".join(cosmetics))
 	return " + ".join(parts) if not parts.is_empty() else "No reward"

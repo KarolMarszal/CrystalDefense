@@ -78,7 +78,7 @@ text = "BACK TO MENU"
 layout_mode = 2
 theme_override_colors/font_color = Color(0.75, 0.75, 0.7, 1)
 theme_override_font_sizes/font_size = 13
-text = "Selections are saved to your profile. In-game visual application is not implemented yet."
+text = "Selections are saved to your profile. Avatar, frame, and emblem appear here and in the main menu; tower, castle, camp, and ordinary-enemy skins apply during gameplay."
 autowrap_mode = 3
 
 [node name="Categories" type="HFlowContainer" parent="Root/Margin/Contents"]
@@ -90,6 +90,18 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.66, 0.89, 1, 1)
 theme_override_font_sizes/font_size = 16
 text = "Selected: Default"
+
+[node name="IdentityPreview" type="HBoxContainer" parent="Root/Margin/Contents"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="UnlockAllTestingButton" type="Button" parent="Root/Margin/Contents"]
+visible = false
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.85, 0.75, 0.4, 1)
+theme_override_font_sizes/font_size = 14
+text = "UNLOCK ALL COSMETICS (TESTING)"
 
 [node name="ListPanel" type="PanelContainer" parent="Root/Margin/Contents"]
 layout_mode = 2

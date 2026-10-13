@@ -28,6 +28,10 @@ GameSpeedManager="*res://managers/GameSpeedManager.gd"
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
+[crystal_defense]
+
+development_mode=true
+
 [editor_plugins]
 
 enabled=PackedStringArray("res://addons/gdUnit4/plugin.cfg")

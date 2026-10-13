@@ -1,6 +1,8 @@
 class_name AchievementEntry
 extends PanelContainer
 
+const CATALOG = preload("res://managers/AchievementCatalog.gd")
+
 @onready var icon_label: Label = $Margin/Contents/Icon
 @onready var title_label: Label = $Margin/Contents/Details/Title
 @onready var description_label: Label = $Margin/Contents/Details/Description
@@ -56,30 +58,10 @@ func configure(
 func _format_reward(
 	definition: Dictionary,
 	reward_granted: bool,
-	cosmetic_unlocked: bool
+	_cosmetic_unlocked: bool
 ) -> String:
-	var reward_parts: Array[String] = []
-	var essence := int(definition.get("reward_essence", 0))
-	if essence > 0:
-		reward_parts.append("%d Essence" % essence)
-
-	var cosmetic_id := String(definition.get("cosmetic_reward_id", ""))
-	if not cosmetic_id.is_empty():
-		var cosmetic_type := String(
-			definition.get("cosmetic_reward_type", "cosmetic")
-		).replace("_", " ").capitalize()
-		var cosmetic_state := (
-			"unlocked"
-			if cosmetic_unlocked
-			else "pending"
-		)
-		reward_parts.append("%s: %s (%s)" % [
-			cosmetic_type,
-			cosmetic_id,
-			cosmetic_state
-		])
-
-	if reward_parts.is_empty():
+	var reward_summary := CATALOG.get_reward_summary(definition)
+	if reward_summary == "No reward":
 		return "Reward: None"
 	var reward_state := "GRANTED" if reward_granted else "LOCKED"
-	return "Reward: %s - %s" % [" + ".join(reward_parts), reward_state]
+	return "Reward: %s - %s" % [reward_summary, reward_state]

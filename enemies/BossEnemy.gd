@@ -70,6 +70,7 @@ func initialize_for_boss(
 	test_hp_multiplier: float = 1.0
 ) -> void:
 	boss_data = data
+	is_boss_entity = true
 	_test_hp_multiplier = maxf(test_hp_multiplier, 1.0)
 	if boss_data == null or boss_data.visual_source == null:
 		push_error("Boss requires BossData with a valid visual source.")

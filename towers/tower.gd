@@ -67,6 +67,9 @@ var _external_attack_speed_debug_contexts: Dictionary = {}
 
 @onready var _crystal_visual: Sprite2D = $CrystalVisual
 @onready var _crystal_socket_visual: CrystalSocketVisual = $CrystalSocketVisual
+@onready var _tower_visual: Sprite2D = $TowerVisual
+
+var _base_tower_texture: Texture2D
 
 var main_socket: TowerSocket:
 	get:
@@ -337,10 +340,15 @@ func get_upgrade_level(track: UpgradeTrack) -> int:
 
 func _ready() -> void:
 	add_to_group("towers")
+	_base_tower_texture = _tower_visual.texture
+	AchievementManager.cosmetic_selection_changed.connect(
+		_on_cosmetic_selection_changed
+	)
 	var collision_shape := $CollisionShape2D as CollisionShape2D
 	var rectangle := RectangleShape2D.new()
 	rectangle.size = Vector2(50.0, 50.0)
 	collision_shape.shape = rectangle
+	_apply_tower_skin()
 	_update_crystal_visual()
 
 
@@ -375,7 +383,29 @@ func _apply_tower_foundation_bonuses(
 
 
 func _exit_tree() -> void:
+	if AchievementManager.cosmetic_selection_changed.is_connected(
+		_on_cosmetic_selection_changed
+	):
+		AchievementManager.cosmetic_selection_changed.disconnect(
+			_on_cosmetic_selection_changed
+		)
 	_clear_aura_effects()
+
+
+func _on_cosmetic_selection_changed(
+	cosmetic_type: String,
+	_cosmetic_id: String
+) -> void:
+	if cosmetic_type == "tower_skin":
+		_apply_tower_skin()
+
+
+func _apply_tower_skin() -> void:
+	if AchievementManager.get_selected_cosmetic("tower_skin").is_empty():
+		_tower_visual.texture = _base_tower_texture
+		return
+	var texture := AchievementManager.get_active_cosmetic_texture("tower_skin")
+	_tower_visual.texture = texture if texture != null else _base_tower_texture
 
 
 func set_range_visible(visible: bool) -> void:

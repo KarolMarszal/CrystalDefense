@@ -17,10 +17,12 @@ var _pending_events: Array[Dictionary] = []
 var _processing_events: bool = false
 var _run_active: bool = false
 var _achievement_state_writable: bool = true
+var _cosmetic_texture_cache: Dictionary = {}
 
 
 func _ready() -> void:
 	_load_state()
+	_reconcile_catalog_cosmetic_unlocks()
 	_discover_enemy_types()
 	_discover_tier_one_bosses()
 	CrystalInventory.essence_earned.connect(_on_essence_earned)
@@ -87,10 +89,8 @@ func has_cosmetic_unlocked(cosmetic_id: String) -> bool:
 
 func get_cosmetic_types() -> Array[String]:
 	var types: Array[String] = []
-	for cosmetic_type in CATALOG.COSMETIC_TYPE_NAMES:
-		types.append(String(cosmetic_type))
-	for definition in CATALOG.DEFINITIONS:
-		var cosmetic_type := String(definition.get("cosmetic_reward_type", ""))
+	for cosmetic in CATALOG.COSMETICS:
+		var cosmetic_type := String(cosmetic["type"])
 		if not cosmetic_type.is_empty() and not types.has(cosmetic_type):
 			types.append(cosmetic_type)
 	return types
@@ -99,29 +99,110 @@ func get_cosmetic_types() -> Array[String]:
 # Locked cosmetics rewarded by hidden achievements are omitted so they stay secret.
 func get_cosmetic_catalog(cosmetic_type: String) -> Array[Dictionary]:
 	var cosmetics: Array[Dictionary] = []
-	for definition in CATALOG.DEFINITIONS:
-		var cosmetic_id := String(definition.get("cosmetic_reward_id", ""))
+	for source in CATALOG.COSMETICS:
+		if String(source["type"]) != cosmetic_type:
+			continue
+		var cosmetic_id := String(source["id"])
+		var unlocked := bool(source.get("default", false)) or _is_cosmetic_owned(
+			cosmetic_id,
+			cosmetic_type
+		)
+		var unlock_definition := _get_unlock_definition(
+			String(source.get("unlock_achievement", ""))
+		)
+		var hidden_source := (
+			not unlock_definition.is_empty()
+			and bool(unlock_definition.get("hidden", false))
+		)
+		var source_revealed: bool = (
+			not hidden_source
+			or _state["unlocked_ids"].has(
+				String(source.get("unlock_achievement", ""))
+			)
+		)
+		if hidden_source and not unlocked:
+			continue
+		var entry := source.duplicate(true)
+		entry["unlocked"] = unlocked
+		entry["texture"] = _load_cosmetic_texture(source)
+		entry["source_title"] = (
+			String(unlock_definition.get("title", ""))
+			if not unlock_definition.is_empty() and source_revealed
+			else (
+				"Secret requirement"
+				if hidden_source
+				else "Default appearance"
+			)
+		)
+		entry["source_description"] = (
+			String(unlock_definition.get("description", ""))
+			if not unlock_definition.is_empty() and source_revealed
+			else (
+				"Secret achievement requirement remains undisclosed."
+				if hidden_source
+				else "Available by default"
+			)
+		)
+		cosmetics.append(entry)
+	return cosmetics
+
+
+func get_cosmetic_entry(cosmetic_type: String, cosmetic_id: String) -> Dictionary:
+	for cosmetic in CATALOG.COSMETICS:
 		if (
-			cosmetic_id.is_empty()
-			or String(definition.get("cosmetic_reward_type", "")) != cosmetic_type
+			String(cosmetic["type"]) != cosmetic_type
+			or String(cosmetic["id"]) != cosmetic_id
 		):
 			continue
-		var unlocked := _is_cosmetic_owned(cosmetic_id, cosmetic_type)
-		if bool(definition["hidden"]) and not unlocked:
-			continue
-		cosmetics.append({
-			"id": cosmetic_id,
-			"type": cosmetic_type,
-			"name": CATALOG.get_cosmetic_name(cosmetic_id),
-			"unlocked": unlocked,
-			"source_title": String(definition["title"]),
-			"display_order": int(definition.get("display_order", 0))
-		})
-	cosmetics.sort_custom(
-		func(a: Dictionary, b: Dictionary) -> bool:
-			return int(a["display_order"]) < int(b["display_order"])
-	)
-	return cosmetics
+		if (
+			not bool(cosmetic.get("default", false))
+			and not _is_cosmetic_owned(cosmetic_id, cosmetic_type)
+		):
+			return {}
+		var entry := cosmetic.duplicate(true)
+		entry["texture"] = _load_cosmetic_texture(cosmetic)
+		return entry
+	return {}
+
+
+func get_active_cosmetic_texture(cosmetic_type: String) -> Texture2D:
+	var selected_id := get_selected_cosmetic(cosmetic_type)
+	var definition: Dictionary
+	if selected_id.is_empty():
+		definition = CATALOG.get_default_cosmetic(cosmetic_type)
+	else:
+		definition = get_cosmetic_entry(cosmetic_type, selected_id)
+	return _load_cosmetic_texture(definition)
+
+
+func get_enemy_skin_texture(enemy_id: String) -> Texture2D:
+	var selected_id := get_selected_cosmetic("enemy_skin")
+	if selected_id.is_empty():
+		return null
+	var definition := get_cosmetic_entry("enemy_skin", selected_id)
+	var compatible_enemy_ids: Array = definition.get("compatible_enemy_ids", [])
+	if not compatible_enemy_ids.has(enemy_id):
+		return null
+	return _load_cosmetic_texture(definition)
+
+
+func _load_cosmetic_texture(definition: Dictionary) -> Texture2D:
+	var path := String(definition.get("texture_path", ""))
+	if path.is_empty():
+		return null
+	if _cosmetic_texture_cache.has(path):
+		return _cosmetic_texture_cache[path] as Texture2D
+	if not ResourceLoader.exists(path):
+		push_warning("Cosmetic texture is missing: %s" % path)
+		_cosmetic_texture_cache[path] = null
+		return null
+	var texture := load(path) as Texture2D
+	if texture == null:
+		push_warning("Cosmetic asset is not a texture: %s" % path)
+		_cosmetic_texture_cache[path] = null
+		return null
+	_cosmetic_texture_cache[path] = texture
+	return texture
 
 
 func get_selected_cosmetic(cosmetic_type: String) -> String:
@@ -157,6 +238,52 @@ func select_cosmetic(cosmetic_type: String, cosmetic_id: String) -> bool:
 	return true
 
 
+func unlock_all_cosmetics_for_testing() -> bool:
+	if (
+		not OS.is_debug_build()
+		or not bool(ProjectSettings.get_setting(
+			"crystal_defense/development_mode",
+			false
+		))
+	):
+		push_warning("All-cosmetics testing unlock requires development_mode.")
+		return false
+	if not _achievement_state_writable:
+		push_error("Cannot unlock cosmetics while achievement data is read-only.")
+		return false
+
+	var candidate := _state.duplicate(true)
+	var cosmetics: Dictionary = candidate["unlocked_cosmetics"]
+	var new_unlocks: Array[Dictionary] = []
+	for cosmetic in CATALOG.COSMETICS:
+		var cosmetic_id := String(cosmetic["id"])
+		if cosmetic_id.is_empty() or bool(cosmetic.get("default", false)):
+			continue
+		var cosmetic_type := String(cosmetic["type"])
+		if String(cosmetics.get(cosmetic_id, "")) == cosmetic_type:
+			continue
+		cosmetics[cosmetic_id] = cosmetic_type
+		new_unlocks.append({
+			"id": cosmetic_id,
+			"type": cosmetic_type
+		})
+
+	if new_unlocks.is_empty():
+		return true
+	candidate["unlocked_cosmetics"] = cosmetics
+	if not CrystalInventory.commit_achievement_state(candidate):
+		push_error("Could not save testing cosmetic unlocks.")
+		return false
+
+	_state = candidate
+	for cosmetic in new_unlocks:
+		cosmetic_unlocked.emit(
+			String(cosmetic["id"]),
+			String(cosmetic["type"])
+		)
+	return true
+
+
 # Testing aid. Essence is not attributed per achievement in the profile, so the
 # balance is intentionally preserved; only achievement-owned records are reset.
 func reset_achievements_for_testing() -> bool:
@@ -167,22 +294,81 @@ func reset_achievements_for_testing() -> bool:
 		return false
 	_pending_events.clear()
 	_state = fresh
+	for cosmetic_type in get_cosmetic_types():
+		cosmetic_selection_changed.emit(cosmetic_type, "")
 	achievements_reset.emit()
 	return true
 
 
 func _is_cosmetic_owned(cosmetic_id: String, cosmetic_type: String) -> bool:
-	return String(_state["unlocked_cosmetics"].get(cosmetic_id, "")) == cosmetic_type
+	return (
+		String(_state["unlocked_cosmetics"].get(cosmetic_id, ""))
+		== cosmetic_type
+	)
 
 
 func _is_cataloged_cosmetic(cosmetic_id: String, cosmetic_type: String) -> bool:
-	for definition in CATALOG.DEFINITIONS:
+	for definition in CATALOG.COSMETICS:
 		if (
-			String(definition.get("cosmetic_reward_id", "")) == cosmetic_id
-			and String(definition.get("cosmetic_reward_type", "")) == cosmetic_type
+			String(definition["id"]) == cosmetic_id
+			and String(definition["type"]) == cosmetic_type
 		):
 			return true
 	return false
+
+
+func _get_unlock_definition(achievement_id: String) -> Dictionary:
+	for definition in CATALOG.DEFINITIONS:
+		if String(definition["id"]) == achievement_id:
+			return definition
+	return {}
+
+
+func _grant_catalog_cosmetics_for_achievement(
+	achievement_id: String,
+	candidate: Dictionary
+) -> void:
+	var cosmetics: Dictionary = candidate["unlocked_cosmetics"]
+	for cosmetic in CATALOG.COSMETICS:
+		if String(cosmetic.get("unlock_achievement", "")) != achievement_id:
+			continue
+		var cosmetic_id := String(cosmetic["id"])
+		var cosmetic_type := String(cosmetic["type"])
+		if cosmetic_id.is_empty():
+			continue
+		cosmetics[cosmetic_id] = cosmetic_type
+	candidate["unlocked_cosmetics"] = cosmetics
+
+
+func _reconcile_catalog_cosmetic_unlocks() -> void:
+	if not _achievement_state_writable:
+		return
+	var candidate := _state.duplicate(true)
+	var cosmetics: Dictionary = candidate["unlocked_cosmetics"]
+	var changed := false
+	for cosmetic in CATALOG.COSMETICS:
+		var cosmetic_id := String(cosmetic["id"])
+		var source_achievement := String(
+			cosmetic.get("unlock_achievement", "")
+		)
+		if (
+			cosmetic_id.is_empty()
+			or source_achievement.is_empty()
+			or not candidate["unlocked_ids"].has(source_achievement)
+		):
+			continue
+		var cosmetic_type := String(cosmetic["type"])
+		if String(cosmetics.get(cosmetic_id, "")) == cosmetic_type:
+			continue
+		cosmetics[cosmetic_id] = cosmetic_type
+		changed = true
+	if not changed:
+		return
+	candidate["unlocked_cosmetics"] = cosmetics
+	if not CrystalInventory.commit_achievement_state(candidate):
+		push_error("Existing achievement unlocks could not be reconciled with the cosmetic catalog.")
+		return
+	_state = candidate
 
 
 func begin_run() -> void:
@@ -424,6 +610,7 @@ func _evaluate_achievements(
 			var cosmetics: Dictionary = candidate["unlocked_cosmetics"]
 			cosmetics[cosmetic_id] = cosmetic_type
 			candidate["unlocked_cosmetics"] = cosmetics
+		_grant_catalog_cosmetics_for_achievement(achievement_id, candidate)
 		newly_granted[achievement_id] = essence_reward
 	candidate["progress"] = progress
 	if event_type in ["enemy_killed", "boss_defeated"]:
@@ -519,6 +706,7 @@ func _evaluate_bestiary(
 			definition["cosmetic_reward_type"]
 		)
 		candidate["unlocked_cosmetics"] = cosmetics
+		_grant_catalog_cosmetics_for_achievement(achievement_id, candidate)
 		newly_granted[achievement_id] = int(
 			definition.get("reward_essence", 0)
 		)

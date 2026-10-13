@@ -30,6 +30,7 @@ const PROFILE_BACKUP_FILE_NAME: String = "player_profile.bak"
 const PROFILE_BACKUP_TEMP_FILE_NAME: String = "player_profile.bak.tmp"
 const AWAKENING_RAPID_FIRE_REWARD_CLAIM: String = "awakening_rapid_fire_crystal"
 const AWAKENING_KINETIC_REWARD_CLAIM: String = "awakening_kinetic_crystal"
+const ACHIEVEMENT_CATALOG = preload("res://managers/AchievementCatalog.gd")
 static func get_skill_crystal_rewards() -> Dictionary:
 	var rewards: Dictionary = {}
 	for definition in SKILL_CATALOG.get_skill_definitions():
@@ -1172,19 +1173,42 @@ func get_cosmetic_selections() -> Dictionary:
 	var selections: Variant = records.get("cosmetic_selections", {})
 	if typeof(selections) != TYPE_DICTIONARY:
 		return {}
-	return selections.duplicate(true)
+	var valid_selections: Dictionary = {}
+	for cosmetic_type in selections:
+		var cosmetic_id := String(selections[cosmetic_type])
+		if _is_valid_cosmetic_selection(String(cosmetic_type), cosmetic_id):
+			valid_selections[String(cosmetic_type)] = cosmetic_id
+	return valid_selections
 
 
 func commit_cosmetic_selections(selections: Dictionary) -> bool:
 	if not _profile_writable:
 		_set_save_status(false, "Cannot save cosmetic selections without a writable profile.")
 		return false
+	for cosmetic_type in selections:
+		var cosmetic_id := String(selections[cosmetic_type])
+		if not _is_valid_cosmetic_selection(String(cosmetic_type), cosmetic_id):
+			_set_save_status(false, "Cosmetic selection does not match a catalog entry.")
+			return false
 
 	var candidate := _profile.duplicate(true)
 	var records: Dictionary = candidate["records"]
 	records["cosmetic_selections"] = selections.duplicate(true)
 	candidate["records"] = records
 	return _commit_profile(candidate)
+
+
+func _is_valid_cosmetic_selection(cosmetic_type: String, cosmetic_id: String) -> bool:
+	if cosmetic_type.is_empty() or cosmetic_id.is_empty():
+		return false
+	for cosmetic in ACHIEVEMENT_CATALOG.COSMETICS:
+		if (
+			String(cosmetic["type"]) == cosmetic_type
+			and String(cosmetic["id"]) == cosmetic_id
+			and not bool(cosmetic.get("default", false))
+		):
+			return true
+	return false
 
 
 # Replaces only achievement-owned data in one save. Essence, skills, crystals

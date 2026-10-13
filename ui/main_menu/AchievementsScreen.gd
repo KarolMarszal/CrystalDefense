@@ -37,6 +37,14 @@ func _ready() -> void:
 
 
 func _build_reset_controls() -> void:
+	if (
+		not OS.is_debug_build()
+		or not bool(ProjectSettings.get_setting(
+			"crystal_defense/development_mode",
+			false
+		))
+	):
+		return
 	var reset_button := Button.new()
 	reset_button.text = "RESET ACHIEVEMENTS (TESTING)"
 	reset_button.custom_minimum_size = Vector2(0, 44)

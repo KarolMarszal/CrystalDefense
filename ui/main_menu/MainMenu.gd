@@ -16,6 +16,9 @@ const PROFILE_SCENE_PATH: String = "res://ui/main_menu/ProfileCustomizationScree
 @onready var reset_confirmation: ConfirmationDialog = $ResetSkillsConfirmation
 
 var _transitioning: bool = false
+var _profile_avatar: TextureRect
+var _profile_frame: TextureRect
+var _profile_emblem: TextureRect
 
 
 func _ready() -> void:
@@ -28,12 +31,23 @@ func _ready() -> void:
 	reset_confirmation.confirmed.connect(_reset_skills)
 	quit_button.pressed.connect(_quit_game)
 	CrystalInventory.profile_changed.connect(_on_profile_changed)
+	AchievementManager.cosmetic_selection_changed.connect(
+		_on_cosmetic_selection_changed
+	)
+	_build_profile_identity()
+	_refresh_profile_identity()
 	_update_inventory_access()
 
 
 func _exit_tree() -> void:
 	if CrystalInventory.profile_changed.is_connected(_on_profile_changed):
 		CrystalInventory.profile_changed.disconnect(_on_profile_changed)
+	if AchievementManager.cosmetic_selection_changed.is_connected(
+		_on_cosmetic_selection_changed
+	):
+		AchievementManager.cosmetic_selection_changed.disconnect(
+			_on_cosmetic_selection_changed
+		)
 
 
 func _on_profile_changed(_profile: Dictionary) -> void:
@@ -42,6 +56,62 @@ func _on_profile_changed(_profile: Dictionary) -> void:
 
 func _update_inventory_access() -> void:
 	inventory_button.visible = CrystalInventory.is_crystal_inventory_unlocked()
+
+
+func _build_profile_identity() -> void:
+	var contents := $CenterPanel/MarginContainer/MenuContents as VBoxContainer
+	var title := $CenterPanel/MarginContainer/MenuContents/Title as Control
+	var identity := HBoxContainer.new()
+	identity.name = "ProfileIdentityPreview"
+	identity.alignment = BoxContainer.ALIGNMENT_CENTER
+	identity.add_theme_constant_override("separation", 8)
+	var avatar_stack := Control.new()
+	avatar_stack.custom_minimum_size = Vector2(58, 58)
+	identity.add_child(avatar_stack)
+	_profile_avatar = _make_profile_texture(avatar_stack)
+	_profile_frame = _make_profile_texture(avatar_stack)
+	_profile_emblem = TextureRect.new()
+	_profile_emblem.custom_minimum_size = Vector2(42, 42)
+	_profile_emblem.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_profile_emblem.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	identity.add_child(_profile_emblem)
+	var label := Label.new()
+	label.text = "PROFILE"
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	identity.add_child(label)
+	contents.add_child(identity)
+	contents.move_child(identity, title.get_index() + 1)
+
+
+func _make_profile_texture(parent: Control) -> TextureRect:
+	var preview := TextureRect.new()
+	preview.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(preview)
+	return preview
+
+
+func _on_cosmetic_selection_changed(
+	_cosmetic_type: String,
+	_cosmetic_id: String
+) -> void:
+	_refresh_profile_identity()
+
+
+func _refresh_profile_identity() -> void:
+	if not is_instance_valid(_profile_avatar):
+		return
+	_profile_avatar.texture = AchievementManager.get_active_cosmetic_texture(
+		"user_avatar"
+	)
+	_profile_frame.texture = AchievementManager.get_active_cosmetic_texture(
+		"profile_frame"
+	)
+	_profile_emblem.texture = AchievementManager.get_active_cosmetic_texture(
+		"emblem"
+	)
 
 
 func _open_game() -> void:

@@ -76,6 +76,7 @@ var first_target_progress: float:
 			return path_length - path_distance
 		return path_distance
 var is_dead: bool = false
+var is_boss_entity: bool = false
 var _has_become_inactive: bool = false
 var resurrection_count: int = 0
 var _combat_rng := RandomNumberGenerator.new()
@@ -99,6 +100,7 @@ var _bleed_remaining: float:
 		)
 
 @onready var _visual: Sprite2D = $Visual
+var _cosmetic_skin_visual: Sprite2D
 
 
 func initialize_for_wave(
@@ -135,17 +137,58 @@ func _ready() -> void:
 	_combat_rng.randomize()
 	_visual.texture = enemy_data.visual_texture
 	_visual.scale = Vector2.ONE * enemy_data.visual_scale
+	AchievementManager.cosmetic_selection_changed.connect(
+		_on_cosmetic_selection_changed
+	)
+	_apply_enemy_skin()
 	add_to_group("enemies")
 	update_health_bar()
 
 
 func _exit_tree() -> void:
+	if AchievementManager.cosmetic_selection_changed.is_connected(
+		_on_cosmetic_selection_changed
+	):
+		AchievementManager.cosmetic_selection_changed.disconnect(
+			_on_cosmetic_selection_changed
+		)
 	_movement_slows.clear()
 	_speed_multipliers.clear()
 	_damage_taken_multipliers.clear()
 	_clear_bleed()
 	_clear_poison()
 	_damage_over_time_effects.erase(&"self_damage")
+
+
+func _on_cosmetic_selection_changed(
+	cosmetic_type: String,
+	_cosmetic_id: String
+) -> void:
+	if cosmetic_type == "enemy_skin":
+		_apply_enemy_skin()
+
+
+func _apply_enemy_skin() -> void:
+	if is_boss_entity or enemy_data == null:
+		if is_instance_valid(_cosmetic_skin_visual):
+			_cosmetic_skin_visual.visible = false
+		return
+	var texture := AchievementManager.get_enemy_skin_texture(
+		String(enemy_data.enemy_id)
+	)
+	if texture == null:
+		if is_instance_valid(_cosmetic_skin_visual):
+			_cosmetic_skin_visual.visible = false
+		return
+	if not is_instance_valid(_cosmetic_skin_visual):
+		_cosmetic_skin_visual = Sprite2D.new()
+		_cosmetic_skin_visual.name = "CosmeticSkinVisual"
+		_cosmetic_skin_visual.position = _visual.position
+		_cosmetic_skin_visual.z_index = 1
+		add_child(_cosmetic_skin_visual)
+	_cosmetic_skin_visual.texture = texture
+	_cosmetic_skin_visual.scale = _visual.scale
+	_cosmetic_skin_visual.visible = true
 
 
 func set_speed_multiplier(source_id: int, multiplier: float) -> void:
